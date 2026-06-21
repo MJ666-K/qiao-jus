@@ -46,7 +46,7 @@ uv pip install -e .
 启动成功后：
 | 入口 | 地址 |
 |---|---|
-| **Web UI** | http://localhost:8000 |
+| **Web UI** | http://localhost:5173 （Vue 前端，见 `../frontend`） |
 | API 文档（Swagger） | http://localhost:8000/docs |
 | 健康检查 | http://localhost:8000/health |
 | Qdrant 控制台 | http://localhost:6333/dashboard |
@@ -74,7 +74,8 @@ Worker:  /tmp/ks_worker.log
 
 ### 首次使用流程
 
-1. 浏览器打开 http://localhost:8000 → 注册账号（自动建租户）
+1. 启动后端 `./scripts/start.sh`，前端 `cd ../frontend && npm run dev`
+2. 浏览器打开 http://localhost:5173 → 注册账号（自动建租户）
 2. 左侧切到"数据集" → 新建一个
 3. 切到"文档" → 选择刚建的数据集 → 拖拽 .md / .pdf / .docx 上传
 4. 等 status 变成 `done`（侧栏会刷新）
@@ -113,11 +114,12 @@ knowledge-service/
 │   ├── pipeline/    Celery + tasks (parse/chunk+embed/graph_build)
 │   ├── retrieve/    hybrid (dense+BM25+RRF) / reranker
 │   └── adapters/    mcp_server
-├── static/          Web UI 静态资源
 ├── scripts/         start/stop/init_db
 ├── tests/           smoke test
 └── docker-compose.yml
 ```
+
+前端 UI 已迁移至项目根目录 [`frontend/`](../frontend)，由 Vue SPA 独立部署。
 
 ## 开发
 

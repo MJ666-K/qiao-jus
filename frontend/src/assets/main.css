@@ -1,0 +1,44 @@
+:root {
+  --brand-primary: #1d4ed8;
+  --brand-sidebar: #0f172a;
+  --brand-bg: #f1f5f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
+  background: var(--brand-bg);
+  color: #0f172a;
+}
+
+.page-title {
+  margin: 0 0 20px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.page-desc {
+  margin: -12px 0 20px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.card-panel {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%);
+  padding: 20px;
+}
+
+.text-pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}

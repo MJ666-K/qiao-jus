@@ -1,11 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from api.routes import auth, datasets, documents, graph, search, stats
 from core.config import settings
@@ -50,17 +47,9 @@ app.include_router(search.router)
 app.include_router(graph.router)
 app.include_router(stats.router)
 
-# src/api/main.py -> project root is two levels up from package root
-_STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
-if _STATIC_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
-
-@app.get("/", include_in_schema=False)
+@app.get("/", tags=["meta"])
 async def root():
-    index = _STATIC_DIR / "index.html"
-    if index.is_file():
-        return FileResponse(str(index))
     return {"name": "knowledge-service", "version": "0.5.0", "docs": "/docs"}
 
 
