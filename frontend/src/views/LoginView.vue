@@ -43,7 +43,7 @@ async function submit() {
         <ul>
           <li>Hybrid 检索：向量 + BM25 + RRF</li>
           <li>GraphRAG：实体关系 + 社区摘要</li>
-          <li>多租户隔离，对接 OpenClaw MCP</li>
+          <li>多租户隔离，模块化 Skill 架构</li>
         </ul>
       </div>
 

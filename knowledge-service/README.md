@@ -1,13 +1,21 @@
 # Knowledge Service
 
-RAG + 基础知识图谱底座，与 OpenClaw 解耦独立部署，通过 MCP / REST 暴露能力。
+RAG + 知识图谱底座，通过 REST API 暴露能力，支持模块化 Skill 架构。
 
 ## 架构
 
 ```
-OpenClaw ──(MCP)──► knowledge-service ──► Qdrant (向量)
-                                       ├─► Neo4j  (图谱)
-                                       └─► Postgres (元数据)
+┌─────────────────────────────────────────────────────┐
+│                knowledge-service                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │
+│  │  FastAPI    │  │  Celery     │  │  Skills   │ │
+│  │  REST API   │  │  异步流水线  │  │  模块化   │ │
+│  └──────┬──────┘  └──────┬─────┘  └─────┬─────┘ │
+│         │                │               │        │
+│  ┌──────┴────────────────┴───────────────┴─────┐ │
+│  │        PostgreSQL │ Qdrant │ Neo4j            │ │
+│  └───────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
 ```
 
 特性：
@@ -81,24 +89,6 @@ Worker:  /tmp/ks_worker.log
 4. 等 status 变成 `done`（侧栏会刷新）
 5. 用"检索"或"问答"测试
 6. 进阶：在"图谱"页点"重建社区"，再试"全局问答"（GraphRAG 跨文档综合）
-
-### 接入 OpenClaw
-
-```bash
-./scripts/openclaw_setup.sh   # 自动注册 MCP server，probe 验证
-```
-
-详细见 [docs/OPENCLAW_INTEGRATION.md](docs/OPENCLAW_INTEGRATION.md)。
-
----
-
-## 服务架构
-
-```
-OpenClaw ──(MCP)──► knowledge-service ──► Qdrant (向量)
-                                       ├─► Neo4j  (图谱)
-                                       └─► Postgres (元数据)
-```
 
 ## 项目结构
 

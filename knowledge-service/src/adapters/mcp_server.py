@@ -7,12 +7,15 @@ from mcp.server.fastmcp import FastMCP
 
 from api.deps import get_current_user  # noqa: F401  (re-exported for tests)
 from core.tenant import CurrentUser
-from retrieve.hybrid import retrieve_children
-from storage.neo4j_client import local_query
+from skills import load_skills
+from skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("knowledge")
+
+# 加载所有 Skills
+load_skills()
 
 
 async def _resolve_user(token: str | None) -> CurrentUser:
@@ -29,6 +32,47 @@ async def _resolve_user(token: str | None) -> CurrentUser:
     )
 
 
+def _skill_tool_wrapper(skill_name: str):
+    """创建 Skill tool 的包装函数"""
+    async def skill_tool(
+        query: str,
+        tenant_id: str,
+        depth: int = 2,
+        top_k: int = 10,
+        use_graph: bool = True,
+        user_token: str | None = None,
+        dataset_id: str | None = None,
+        doc_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Dynamic Skill tool wrapper"""
+        user = await _resolve_user(user_token)
+        skill = SkillRegistry.get(skill_name)
+        if not skill:
+            raise ValueError(f"Skill not found: {skill_name}")
+        params = {
+            "query": query,
+            "tenant_id": user.tenant_id,
+            "depth": depth,
+            "top_k": top_k,
+            "use_graph": use_graph,
+            "dataset_id": dataset_id,
+            "doc_type": doc_type,
+        }
+        return await skill.execute(params)
+    return skill_tool
+
+
+# 动态注册 Skill tools
+for skill_meta in SkillRegistry.list_skills():
+    skill_name = skill_meta["name"]
+    tool_fn = _skill_tool_wrapper(skill_name)
+    tool_fn.__name__ = f"{skill_name}_tool"
+    tool_fn.__doc__ = f"Execute {skill_name} skill"
+    mcp.tool()(tool_fn)
+
+
+# ==================== 原有 Tools（保持向后兼容） ====================
+
 @mcp.tool()
 async def knowledge_search(
     query: str,
@@ -41,6 +85,8 @@ async def knowledge_search(
     Returns up to `top_k` relevant chunks with source attribution.
     Pass a valid JWT in `user_token` for tenant isolation.
     """
+    from retrieve.hybrid import retrieve_children
+
     user = await _resolve_user(user_token)
     hits = await retrieve_children(
         query=query,
@@ -61,6 +107,7 @@ async def graph_query(
     neighbors up to `depth` hops, return entities + related chunks.
     """
     from pipeline.graph_build import extract_entities_relations
+    from storage.neo4j_client import local_query
 
     user = await _resolve_user(user_token)
     ents, _ = await extract_entities_relations(query)
@@ -82,6 +129,8 @@ async def knowledge_answer(
     with citations. Pass a valid JWT in `user_token` for tenant isolation."""
     from core.llm import chat
     from pipeline.graph_build import extract_entities_relations
+    from retrieve.hybrid import retrieve_children
+    from storage.neo4j_client import local_query
 
     user = await _resolve_user(user_token)
     hits = await retrieve_children(query=query, tenant_id=user.tenant_id, top_k=8)

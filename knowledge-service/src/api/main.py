@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Knowledge Service",
-    description="Knowledge base + Knowledge graph service for OpenClaw integration",
+    description="Knowledge base + Knowledge graph service with modular Skills architecture",
     version="0.5.0",
     lifespan=lifespan,
 )
