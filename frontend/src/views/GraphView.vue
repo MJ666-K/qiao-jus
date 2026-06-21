@@ -241,101 +241,97 @@ async function rebuild() {
         />
       </div>
 
-      <div class="graph-side-wrap">
-        <div class="card-panel graph-side">
-          <h4>实体</h4>
-          <el-empty v-if="!entities.length" description="暂无" />
-          <div v-else class="name-list">
-            <div
-              v-for="e in entities"
-              :key="e.id"
-              class="name-item"
-              :class="{ active: selectedEntityId === e.id }"
-              @click="openEntity(e.id)"
-            >
-              {{ e.name }}
-            </div>
-          </div>
-        </div>
-
-        <div class="card-panel graph-side">
-          <h4>关系</h4>
-          <el-empty v-if="!relations.length" description="暂无" />
-          <div v-else class="name-list">
-            <div
-              v-for="r in relations"
-              :key="relationKey(r)"
-              class="name-item"
-              :class="{ active: selectedRelationKey === relationKey(r) }"
-              @click="openRelation(r)"
-            >
-              {{ relName(r.source) }} → {{ relName(r.target) }}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <el-drawer
       v-model="drawerOpen"
-      :title="drawerMode === 'entity' ? selectedEntity?.name ?? '实体' : '关系详情'"
+      :title="drawerMode === 'entity' ? selectedEntity?.name ?? '实体详情' : '关系详情'"
       direction="rtl"
-      size="360px"
+      size="380px"
     >
-      <template v-if="drawerMode === 'entity' && selectedEntity">
-        <dl class="detail-dl">
-          <dt>名称</dt>
-          <dd>{{ selectedEntity.name }}</dd>
-          <dt>类型</dt>
-          <dd>{{ selectedEntity.type || '—' }}</dd>
-          <dt>描述</dt>
-          <dd>{{ selectedEntity.description?.trim() || '—' }}</dd>
-          <dt>标识</dt>
-          <dd class="mono">{{ selectedEntity.id }}</dd>
-        </dl>
+      <div class="drawer-content">
+        <template v-if="drawerMode === 'entity' && selectedEntity">
+          <div class="info-card">
+            <div class="info-label">名称</div>
+            <div class="info-value">{{ selectedEntity.name }}</div>
+          </div>
 
-        <h5 class="detail-section">出边</h5>
-        <el-empty v-if="!entityRelations.out.length" description="无" :image-size="48" />
-        <ul v-else class="rel-mini">
-          <li v-for="r in entityRelations.out" :key="'o' + relationKey(r)" @click="openRelation(r)">
-            → {{ relName(r.target) }}
-            <span class="rel-type">{{ r.type || '关联' }}</span>
-          </li>
-        </ul>
+          <div class="info-item">
+            <dl class="detail-dl" style="margin:0">
+              <dt>类型</dt>
+              <dd>{{ selectedEntity.type || '未知' }}</dd>
+            </dl>
+          </div>
 
-        <h5 class="detail-section">入边</h5>
-        <el-empty v-if="!entityRelations.in.length" description="无" :image-size="48" />
-        <ul v-else class="rel-mini">
-          <li v-for="r in entityRelations.in" :key="'i' + relationKey(r)" @click="openRelation(r)">
-            ← {{ relName(r.source) }}
-            <span class="rel-type">{{ r.type || '关联' }}</span>
-          </li>
-        </ul>
-      </template>
+          <div class="info-item" v-if="selectedEntity.description?.trim()">
+            <dl class="detail-dl" style="margin:0">
+              <dt>描述</dt>
+              <dd>{{ selectedEntity.description?.trim() }}</dd>
+            </dl>
+          </div>
 
-      <template v-else-if="drawerMode === 'relation' && selectedRelation">
-        <dl class="detail-dl">
-          <dt>起点</dt>
-          <dd>
-            <el-button link type="primary" @click="openEntity(selectedRelation.source)">
-              {{ relName(selectedRelation.source) }}
-            </el-button>
-          </dd>
-          <dt>终点</dt>
-          <dd>
-            <el-button link type="primary" @click="openEntity(selectedRelation.target)">
-              {{ relName(selectedRelation.target) }}
-            </el-button>
-          </dd>
-          <dt>关系类型</dt>
-          <dd>{{ selectedRelation.type || 'RELATED' }}</dd>
-          <dt>描述</dt>
-          <dd>{{ selectedRelation.description?.trim() || '—' }}</dd>
-          <dt v-if="selectedRelation.weight">权重</dt>
-          <dd v-if="selectedRelation.weight">{{ selectedRelation.weight }}</dd>
-        </dl>
-        <el-button type="danger" plain class="full-btn" @click="deleteSelectedRelation">删除此关系</el-button>
-      </template>
+          <div class="info-item">
+            <dl class="detail-dl" style="margin:0">
+              <dt>标识</dt>
+              <dd class="mono">{{ selectedEntity.id }}</dd>
+            </dl>
+          </div>
+
+          <h5 class="detail-section">出边 ({{ entityRelations.out.length }})</h5>
+          <el-empty v-if="!entityRelations.out.length" description="暂无出边" :image-size="48" />
+          <ul v-else class="rel-mini">
+            <li v-for="r in entityRelations.out" :key="'o' + relationKey(r)" @click="openRelation(r)">
+              <span>→ {{ relName(r.target) }}</span>
+              <span class="rel-type">{{ r.type || '关联' }}</span>
+            </li>
+          </ul>
+
+          <h5 class="detail-section">入边 ({{ entityRelations.in.length }})</h5>
+          <el-empty v-if="!entityRelations.in.length" description="暂无入边" :image-size="48" />
+          <ul v-else class="rel-mini">
+            <li v-for="r in entityRelations.in" :key="'i' + relationKey(r)" @click="openRelation(r)">
+              <span>← {{ relName(r.source) }}</span>
+              <span class="rel-type">{{ r.type || '关联' }}</span>
+            </li>
+          </ul>
+        </template>
+
+        <template v-else-if="drawerMode === 'relation' && selectedRelation">
+          <div class="relation-flow">
+            <div class="node">
+              <div class="node-label">起点</div>
+              <div class="node-name" @click="openEntity(selectedRelation.source)">
+                {{ relName(selectedRelation.source) }}
+              </div>
+            </div>
+            <div class="arrow">→</div>
+            <div class="node">
+              <div class="node-label">终点</div>
+              <div class="node-name" @click="openEntity(selectedRelation.target)">
+                {{ relName(selectedRelation.target) }}
+              </div>
+            </div>
+          </div>
+
+          <div class="rel-tags">
+            <span class="rel-tag type">{{ selectedRelation.type || 'RELATED' }}</span>
+            <span class="rel-tag desc" v-if="selectedRelation.description?.trim()">
+              {{ selectedRelation.description?.trim() }}
+            </span>
+          </div>
+
+          <div class="info-item" v-if="selectedRelation.weight">
+            <dl class="detail-dl" style="margin:0">
+              <dt>权重</dt>
+              <dd>{{ selectedRelation.weight }}</dd>
+            </dl>
+          </div>
+
+          <el-button type="danger" plain class="full-btn" @click="deleteSelectedRelation">
+            删除此关系
+          </el-button>
+        </template>
+      </div>
     </el-drawer>
 
     <div v-if="showCommunities" class="card-panel mt">
@@ -357,7 +353,7 @@ async function rebuild() {
 .ex-tag { cursor: pointer; }
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
 .flex-1 { flex: 1; min-width: 200px; }
-.graph-layout { display: grid; grid-template-columns: 1fr 220px; gap: 16px; }
+.graph-layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .graph-main { position: relative; min-height: 520px; }
 .canvas-toolbar {
   display: flex; gap: 8px; flex-wrap: wrap;
@@ -380,18 +376,38 @@ async function rebuild() {
 .name-item:hover { background: #f1f5f9; }
 .name-item.active { background: #eff6ff; color: #1d4ed8; }
 .detail-dl { margin: 0 0 16px; }
-.detail-dl dt { font-size: 12px; color: #94a3b8; margin-top: 12px; }
+.detail-dl dt { font-size: 12px; color: #64748b; margin-top: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
 .detail-dl dt:first-child { margin-top: 0; }
-.detail-dl dd { margin: 4px 0 0; font-size: 14px; color: #1e293b; word-break: break-all; }
-.detail-dl .mono { font-family: ui-monospace, monospace; font-size: 12px; color: #64748b; }
-.detail-section { margin: 16px 0 8px; font-size: 14px; }
-.rel-mini { list-style: none; margin: 0; padding: 0; }
+.detail-dl dd { margin: 4px 0 0; font-size: 14px; color: #1e293b; word-break: break-all; line-height: 1.5; }
+.detail-dl .mono { font-family: ui-monospace, monospace; font-size: 11px; color: #94a3b8; background: #f8fafc; padding: 2px 6px; border-radius: 4px; }
+.detail-section { margin: 20px 0 10px; font-size: 13px; font-weight: 600; color: #334155; display: flex; align-items: center; gap: 8px; }
+.detail-section::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
+.rel-mini { list-style: none; margin: 0; padding: 0; background: #f8fafc; border-radius: 8px; overflow: hidden; }
 .rel-mini li {
-  padding: 8px 0; border-bottom: 1px solid #f1f5f9; cursor: pointer; font-size: 13px;
+  padding: 10px 12px; border-bottom: 1px solid #e2e8f0; cursor: pointer; font-size: 13px;
+  display: flex; align-items: center; gap: 8px; transition: background 0.15s;
 }
-.rel-mini li:hover { color: #2563eb; }
-.rel-type { margin-left: 8px; font-size: 12px; color: #94a3b8; }
-.full-btn { width: 100%; margin-top: 16px; }
+.rel-mini li:last-child { border-bottom: none; }
+.rel-mini li:hover { background: #eff6ff; color: #2563eb; }
+.rel-type { margin-left: auto; font-size: 11px; color: #94a3b8; background: #fff; padding: 2px 8px; border-radius: 10px; border: 1px solid #e2e8f0; }
+.full-btn { width: 100%; margin-top: 20px; }
+.drawer-content { padding: 4px 0; }
+.info-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.info-card .info-label { font-size: 11px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+.info-card .info-value { font-size: 16px; font-weight: 600; margin-top: 4px; word-break: break-all; }
+.info-item { background: #f8fafc; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }
+.info-item dt { color: #64748b !important; margin-top: 0 !important; }
+.info-item dd { color: #1e293b !important; font-size: 13px !important; }
+.relation-flow { display: flex; align-items: center; gap: 12px; padding: 14px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 10px; margin-bottom: 16px; }
+.relation-flow .node { flex: 1; text-align: center; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.relation-flow .node-name { font-size: 13px; font-weight: 500; color: #1e293b; cursor: pointer; }
+.relation-flow .node-name:hover { color: #2563eb; text-decoration: underline; }
+.relation-flow .node-label { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+.relation-flow .arrow { font-size: 20px; color: #94a3b8; }
+.rel-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.rel-tag { font-size: 12px; padding: 4px 10px; border-radius: 6px; }
+.rel-tag.type { background: #eff6ff; color: #2563eb; }
+.rel-tag.desc { background: #f0fdf4; color: #16a34a; }
 .mt { margin-top: 16px; }
 .community-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .community-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
