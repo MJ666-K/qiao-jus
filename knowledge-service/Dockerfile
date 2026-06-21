@@ -18,8 +18,10 @@ RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.li
 WORKDIR /app
 
 COPY pyproject.toml ./
+COPY src ./src
 RUN pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com -e .
 
+COPY static ./static
 COPY . .
 
 EXPOSE 8000

@@ -50,7 +50,8 @@ app.include_router(search.router)
 app.include_router(graph.router)
 app.include_router(stats.router)
 
-_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+# src/api/main.py -> project root is two levels up from package root
+_STATIC_DIR = Path(__file__).resolve().parents[2] / "static"
 if _STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 

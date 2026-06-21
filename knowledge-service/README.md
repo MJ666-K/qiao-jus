@@ -103,16 +103,18 @@ OpenClaw ──(MCP)──► knowledge-service ──► Qdrant (向量)
 
 ```
 knowledge-service/
-├── api/             FastAPI 路由 + deps
-├── core/            config / security / tenant / llm
-├── models/          SQLAlchemy 2.0
-├── schemas/         Pydantic v2
-├── storage/         postgres / qdrant / neo4j 适配
-├── ingest/          parser (unstructured) / chunker (parent-child)
-├── pipeline/        Celery + tasks (parse/chunk+embed/graph_build)
-├── retrieve/        hybrid (dense+BM25+RRF) / reranker
-├── adapters/        mcp_server
-├── scripts/         init_db
+├── src/             Python 源码（src layout）
+│   ├── api/         FastAPI 路由 + deps
+│   ├── core/        config / security / tenant / llm
+│   ├── models/      SQLAlchemy 2.0
+│   ├── schemas/     Pydantic v2
+│   ├── storage/     postgres / qdrant / neo4j 适配
+│   ├── ingest/      parser (unstructured) / chunker (parent-child)
+│   ├── pipeline/    Celery + tasks (parse/chunk+embed/graph_build)
+│   ├── retrieve/    hybrid (dense+BM25+RRF) / reranker
+│   └── adapters/    mcp_server
+├── static/          Web UI 静态资源
+├── scripts/         start/stop/init_db
 ├── tests/           smoke test
 └── docker-compose.yml
 ```
@@ -126,14 +128,14 @@ pytest -q
 
 # 类型/格式检查
 ruff check .
-mypy core api
+mypy src/core src/api
 ```
 
 ## 下一步扩展
 
 | 方向 | 怎么做 |
 |------|------|
-| 启用 Reranker | 在 `retrieve/reranker.py` 接入 bge-reranker-v2-m3 |
+| 启用 Reranker | 在 `src/retrieve/reranker.py` 接入 bge-reranker-v2-m3 |
 | 全局图谱问答 | 实现 GraphRAG 社区检测 + 层次摘要（level 0..N） |
 | 权限细粒度 | 在 Qdrant payload 加 `acl_read`，Qdrant 过滤 |
 | 文档版本控制 | 给 `documents` 加 `version` 字段，重新上传走 reindex |
