@@ -4,6 +4,7 @@ import type { DocumentItem } from '@/types'
 export async function listDocuments(params?: {
   dataset_id?: string
   status_filter?: string
+  doc_type?: string
 }): Promise<DocumentItem[]> {
   const { data } = await apiClient.get<DocumentItem[]>('/documents', { params })
   return data
@@ -14,11 +15,15 @@ export async function getDocument(id: string): Promise<DocumentItem> {
   return data
 }
 
-export async function uploadDocument(file: File, datasetId: string): Promise<DocumentItem> {
+export async function uploadDocument(
+  file: File,
+  datasetId: string,
+  docType = 'general',
+): Promise<DocumentItem> {
   const form = new FormData()
   form.append('file', file)
   const { data } = await apiClient.post<DocumentItem>(
-    `/documents/upload?dataset_id=${datasetId}`,
+    `/documents/upload?dataset_id=${datasetId}&doc_type=${docType}`,
     form,
     { headers: { 'Content-Type': 'multipart/form-data' } },
   )

@@ -104,6 +104,7 @@ class Chunk(Base):
     char_count: Mapped[int | None]
     qdrant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     embedding_model: Mapped[str | None] = mapped_column(String(100))
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped[Document] = relationship(back_populates="chunks")

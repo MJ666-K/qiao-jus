@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class SearchQuery(BaseModel):
     query: str = Field(min_length=1)
     dataset_id: UUID | None = None
+    doc_type: str | None = None
     filters: dict[str, Any] = {}
     top_k: int = Field(default=10, ge=1, le=50)
     use_graph: bool = True
@@ -20,6 +21,9 @@ class SearchHit(BaseModel):
     document_id: str | None = None
     page: int | None = None
     metadata: dict[str, Any] = {}
+    doc_type: str | None = None
+    article_no: str | None = None
+    law_name: str | None = None
 
 
 class SearchResult(BaseModel):

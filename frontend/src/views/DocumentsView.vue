@@ -11,24 +11,34 @@ import {
   uploadDocument,
 } from '@/api/documents'
 import DocStatusTag from '@/components/DocStatusTag.vue'
+import { docTypeLabel } from '@/constants/docTypes'
 import type { Dataset, DocumentItem } from '@/types'
 
 const loading = ref(false)
 const datasets = ref<Dataset[]>([])
 const documents = ref<DocumentItem[]>([])
 const datasetFilter = ref('')
+const docTypeFilter = ref('')
+const uploadDocType = ref('law')
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 async function loadDatasets() {
   datasets.value = await listDatasets()
 }
 
+async function onDatasetChange(id: string) {
+  const ds = datasets.value.find((d) => d.id === id)
+  uploadDocType.value = String(ds?.metadata?.doc_type || 'law')
+  await loadDocuments()
+}
+
 async function loadDocuments() {
   loading.value = true
   try {
-    documents.value = await listDocuments(
-      datasetFilter.value ? { dataset_id: datasetFilter.value } : undefined,
-    )
+    documents.value = await listDocuments({
+      ...(datasetFilter.value ? { dataset_id: datasetFilter.value } : {}),
+      ...(docTypeFilter.value ? { doc_type: docTypeFilter.value } : {}),
+    })
   } finally {
     loading.value = false
   }
@@ -40,7 +50,9 @@ async function onUpload(file: File) {
     return false
   }
   try {
-    const doc = await uploadDocument(file, datasetFilter.value)
+    const ds = datasets.value.find((d) => d.id === datasetFilter.value)
+    const dt = String(ds?.metadata?.doc_type || uploadDocType.value)
+    const doc = await uploadDocument(file, datasetFilter.value, dt)
     ElMessage.success(`已上传：${doc.title}`)
     await loadDocuments()
   } catch (e) {
@@ -90,8 +102,13 @@ onUnmounted(() => {
   <div>
     <div class="toolbar">
       <p class="page-desc">上传法规、类案、合同等材料，自动走 parse → chunk → embed → graph 流水线</p>
-      <el-select v-model="datasetFilter" placeholder="选择知识库" clearable @change="loadDocuments">
+      <el-select v-model="datasetFilter" placeholder="选择知识库" clearable @change="onDatasetChange">
         <el-option v-for="ds in datasets" :key="ds.id" :label="ds.name" :value="ds.id" />
+      </el-select>
+      <el-select v-model="docTypeFilter" placeholder="文档类型" clearable @change="loadDocuments">
+        <el-option label="法规" value="law" />
+        <el-option label="类案" value="case" />
+        <el-option label="合规" value="compliance" />
       </el-select>
     </div>
 
@@ -114,6 +131,11 @@ onUnmounted(() => {
       <el-empty v-if="!documents.length" description="暂无文档" />
       <el-table v-else :data="documents" stripe>
         <el-table-column prop="title" label="标题" min-width="200" />
+        <el-table-column label="类型" width="100">
+          <template #default="{ row }">
+            {{ docTypeLabel(String(row.metadata?.doc_type || '')) }}
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <DocStatusTag :status="row.status" />

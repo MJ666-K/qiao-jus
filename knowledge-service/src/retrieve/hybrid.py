@@ -23,6 +23,7 @@ async def retrieve_children(
     query: str,
     tenant_id: str,
     dataset_id: str | None = None,
+    doc_type: str | None = None,
     top_k: int | None = None,
 ) -> list[dict[str, Any]]:
     """Hybrid retrieval over child chunks. Combines Qdrant dense search with a
@@ -32,12 +33,14 @@ async def retrieve_children(
     dense_filters: dict[str, Any] = {"tenant_id": tenant_id}
     if dataset_id:
         dense_filters["dataset_id"] = dataset_id
+    if doc_type:
+        dense_filters["doc_type"] = doc_type
 
     query_vec_list = await asyncio.to_thread(embed_texts, [query])
     query_vec = query_vec_list[0]
 
     dense_task = search_dense(query_vec, dense_filters, top_k * 3)
-    bm25_task = _bm25_search(query, tenant_id, dataset_id, top_k * 3)
+    bm25_task = _bm25_search(query, tenant_id, dataset_id, doc_type, top_k * 3)
     dense_hits, bm25_hits = await asyncio.gather(dense_task, bm25_task)
 
     fused = rrf_fusion(
@@ -62,9 +65,13 @@ async def retrieve_children(
             "chunk_id": parent_key,
             "text": r["parent_text"] or r["child_text"],
             "score": float(score),
-            "source": r["title"],
+            "source": _format_source(r),
             "document_id": str(r["document_id"]),
             "page": r.get("page"),
+            "metadata": r.get("metadata") or {},
+            "doc_type": r.get("doc_type"),
+            "article_no": r.get("article_no"),
+            "law_name": r.get("law_name"),
             "_raw_pid": pid,
         })
 
@@ -84,6 +91,10 @@ async def retrieve_children(
             "source": r["source"],
             "document_id": r["document_id"],
             "page": r.get("page"),
+            "metadata": r.get("metadata") or {},
+            "doc_type": r.get("doc_type"),
+            "article_no": r.get("article_no"),
+            "law_name": r.get("law_name"),
         })
         if len(out) >= top_k:
             break
@@ -100,12 +111,17 @@ async def _fetch_chunks_with_parents(child_ids: list[uuid.UUID]) -> list[dict[st
         rows: list[dict[str, Any]] = []
         parent_ids: list[uuid.UUID] = []
         for c, title in res.all():
+            meta = dict(c.metadata_ or {})
             rows.append({
                 "child_id": c.id,
                 "child_text": c.text,
                 "parent_id": c.parent_id,
                 "document_id": c.document_id,
                 "title": title,
+                "metadata": meta,
+                "doc_type": meta.get("doc_type"),
+                "article_no": meta.get("article_no"),
+                "law_name": meta.get("law_name"),
             })
             if c.parent_id and c.parent_id not in parent_ids:
                 parent_ids.append(c.parent_id)
@@ -120,9 +136,9 @@ async def _fetch_chunks_with_parents(child_ids: list[uuid.UUID]) -> list[dict[st
 
 
 async def _bm25_search(
-    query: str, tenant_id: str, dataset_id: str | None, top_k: int
+    query: str, tenant_id: str, dataset_id: str | None, doc_type: str | None, top_k: int
 ) -> list[dict[str, Any]]:
-    corpus = await _load_corpus(tenant_id, dataset_id)
+    corpus = await _load_corpus(tenant_id, dataset_id, doc_type)
     if not corpus:
         return []
     bm25 = BM25Index(corpus=[c["text"] for c in corpus])
@@ -131,8 +147,7 @@ async def _bm25_search(
     return [{"id": str(c["id"]), "score": float(s)} for c, s in ranked if s > 0]
 
 
-async def _load_corpus(tenant_id: str, dataset_id: str | None) -> list[dict[str, Any]]:
-    # Document has no tenant_id column; tenancy lives on Dataset. Join through.
+async def _load_corpus(tenant_id: str, dataset_id: str | None, doc_type: str | None = None) -> list[dict[str, Any]]:
     async with SessionLocal() as session:
         stmt = (
             select(Chunk.id, Chunk.text)
@@ -142,8 +157,22 @@ async def _load_corpus(tenant_id: str, dataset_id: str | None) -> list[dict[str,
         )
         if dataset_id:
             stmt = stmt.where(Document.dataset_id == _uuid(dataset_id))
+        if doc_type:
+            stmt = stmt.where(Document.metadata_["doc_type"].astext == doc_type)
         res = await session.execute(stmt)
         return [{"id": r[0], "text": r[1]} for r in res.all()]
+
+
+def _format_source(row: dict[str, Any]) -> str:
+    law = row.get("law_name")
+    article = row.get("article_no")
+    if law and article:
+        return f"{law} {article}"
+    if row.get("doc_type") == "case":
+        cause = (row.get("metadata") or {}).get("cause")
+        if cause:
+            return f"类案·{cause}"
+    return row.get("title") or "未知来源"
 
 
 def _uuid(s: str):

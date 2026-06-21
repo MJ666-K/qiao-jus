@@ -2,15 +2,18 @@ import hashlib
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from api.deps import CurrentUserDep, SessionDep
 from core.config import settings
 from models.base import Dataset, Document
+from ingest.doc_types import DOC_TYPE_LABELS, GENERAL
 from pipeline.tasks import build_graph, chunk_and_embed, parse_document, reindex_document
 from schemas.document import DocumentOut
+
+VALID_DOC_TYPES = set(DOC_TYPE_LABELS.keys())
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -21,6 +24,7 @@ async def list_documents(
     session: SessionDep,
     dataset_id: str | None = None,
     status_filter: str | None = None,
+    doc_type: str | None = None,
     limit: int = 100,
 ):
     """List documents for the current tenant, optionally filtered by dataset/status."""
@@ -34,6 +38,8 @@ async def list_documents(
         stmt = stmt.where(Document.dataset_id == _uuid(dataset_id))
     if status_filter:
         stmt = stmt.where(Document.status == status_filter)
+    if doc_type:
+        stmt = stmt.where(Document.metadata_["doc_type"].astext == doc_type)
     stmt = stmt.order_by(Document.created_at.desc()).limit(limit)
     res = await session.execute(stmt)
     return [DocumentOut.model_validate(_as_out(d)) for d in res.scalars().unique().all()]
@@ -45,7 +51,10 @@ async def upload_document(
     dataset_id: str,
     user: CurrentUserDep,
     session: SessionDep,
+    doc_type: str = Query(default=GENERAL, description="文档类型: law/case/compliance/..."),
 ):
+    if doc_type not in VALID_DOC_TYPES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"invalid doc_type, choose from {sorted(VALID_DOC_TYPES)}")
     ds = await session.get(Dataset, uuid.UUID(dataset_id))
     if not ds or str(ds.tenant_id) != user.tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "dataset not found")
@@ -68,6 +77,17 @@ async def upload_document(
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(raw)
 
+    ds_meta = dict(ds.metadata_ or {})
+    doc_meta = {
+        "doc_type": doc_type,
+        "original_filename": file.filename,
+        "scope": ds_meta.get("scope", "platform"),
+    }
+    if ds_meta.get("domain"):
+        doc_meta["domain"] = ds_meta["domain"]
+    if ds_meta.get("law_name"):
+        doc_meta["law_name"] = ds_meta["law_name"]
+
     doc = Document(
         dataset_id=ds.id,
         title=file.filename or "untitled",
@@ -75,7 +95,7 @@ async def upload_document(
         content_hash=content_hash,
         mime_type=file.content_type,
         status="pending",
-        metadata_={"original_filename": file.filename},
+        metadata_=doc_meta,
     )
     session.add(doc)
     await session.commit()

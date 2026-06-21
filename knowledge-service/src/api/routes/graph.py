@@ -1,36 +1,27 @@
 from fastapi import APIRouter, HTTPException
 
 from api.deps import CurrentUserDep
-from pipeline.graph_build import extract_entities_relations
 from pipeline.graph_global import global_answer
-from schemas.graph import GraphEdge, GraphNode, GraphQueryRequest, GraphQueryResult
-from storage.neo4j_client import list_communities_async, local_query
+from pipeline.graph_query import resolve_graph_entities
+from schemas.graph import GraphEdge, GraphNode, GraphQueryRequest, GraphQueryResult, RelationMutation
+from storage.neo4j_client import (
+    count_entities,
+    create_relation,
+    delete_relation,
+    list_communities_async,
+)
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
 
-@router.post("/local", response_model=GraphQueryResult)
-async def local(payload: GraphQueryRequest, user: CurrentUserDep):
-    ents, _ = await extract_entities_relations(payload.query)
-    if not ents:
-        return GraphQueryResult()
-    names = [e["name"] for e in ents]
-    res = await local_query(
-        names,
-        tenant_id=user.tenant_id,
-        depth=payload.depth,
-        limit=50,
-    )
-    raw_entities = (res or {}).get("entities", [])
-    raw_chunks = (res or {}).get("chunks", [])
-
-    seen_entities: set[str] = set()
+def _to_nodes(raw_entities: list[dict]) -> list[GraphNode]:
+    seen: set[str] = set()
     nodes: list[GraphNode] = []
     for e in raw_entities:
         eid = e.get("id") or e.get("name")
-        if not eid or eid in seen_entities:
+        if not eid or eid in seen:
             continue
-        seen_entities.add(eid)
+        seen.add(eid)
         nodes.append(
             GraphNode(
                 id=eid,
@@ -39,9 +30,85 @@ async def local(payload: GraphQueryRequest, user: CurrentUserDep):
                 description=e.get("description"),
             )
         )
+    return nodes
 
+
+def _to_edges(raw_relations: list[dict]) -> list[GraphEdge]:
     edges: list[GraphEdge] = []
-    return GraphQueryResult(entities=nodes, relations=edges, related_chunks=raw_chunks)
+    seen: set[tuple[str, str, str]] = set()
+    for r in raw_relations:
+        src, tgt = r.get("source"), r.get("target")
+        if not src or not tgt:
+            continue
+        rtype = r.get("type") or "RELATED"
+        key = (src, tgt, rtype)
+        if key in seen:
+            continue
+        seen.add(key)
+        edges.append(
+            GraphEdge(
+                source=src,
+                target=tgt,
+                type=rtype,
+                description=r.get("description"),
+                weight=float(r.get("weight") or 1),
+            )
+        )
+    return edges
+
+
+@router.post("/local", response_model=GraphQueryResult)
+async def local(payload: GraphQueryRequest, user: CurrentUserDep):
+    res = await resolve_graph_entities(
+        payload.query, user.tenant_id, payload.depth, limit=50
+    )
+    raw_entities = (res or {}).get("entities", [])
+    raw_relations = (res or {}).get("relations", [])
+    raw_chunks = (res or {}).get("chunks", [])
+    return GraphQueryResult(
+        entities=_to_nodes(raw_entities),
+        relations=_to_edges(raw_relations),
+        related_chunks=raw_chunks,
+    )
+
+
+@router.post("/relations", response_model=GraphEdge)
+async def add_relation(payload: RelationMutation, user: CurrentUserDep):
+    try:
+        await create_relation(
+            user.tenant_id,
+            payload.source,
+            payload.target,
+            payload.type,
+            payload.description or "",
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return GraphEdge(
+        source=payload.source,
+        target=payload.target,
+        type=payload.type,
+        description=payload.description,
+    )
+
+
+@router.delete("/relations")
+async def remove_relation(
+    user: CurrentUserDep,
+    source: str,
+    target: str,
+):
+    deleted = await delete_relation(user.tenant_id, source, target)
+    if not deleted:
+        raise HTTPException(404, "relation not found")
+    return {"status": "ok"}
+
+
+@router.get("/stats")
+async def graph_stats(user: CurrentUserDep):
+    """Tenant-level graph entity count for UI hints."""
+    total = await count_entities(user.tenant_id)
+    return {"entity_count": total}
 
 
 @router.get("/communities")

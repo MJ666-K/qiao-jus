@@ -52,6 +52,12 @@ const router = createRouter({
           component: () => import('@/views/ChatView.vue'),
           meta: { title: '智能问答' },
         },
+        {
+          path: 'settings',
+          name: 'settings',
+          component: () => import('@/views/SettingsView.vue'),
+          meta: { title: '系统配置' },
+        },
       ],
     },
   ],

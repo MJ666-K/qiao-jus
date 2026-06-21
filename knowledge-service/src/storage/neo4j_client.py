@@ -125,33 +125,236 @@ async def local_query(
     tenant_id: str,
     depth: int = 2,
     limit: int = 50,
+    keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     # Cypher forbids parameterized variable-length hops (`*1..$depth`); depth is
     # a validated int from the API schema so f-string interpolation is safe.
     if not isinstance(depth, int) or depth < 1 or depth > 3:
         depth = 2
+    keys = [k.strip() for k in (keywords or []) + entities if k and k.strip()]
+    if not keys:
+        return {"entities": [], "relations": [], "chunks": []}
+    # Dedupe while preserving order; prefer longer keywords first for CONTAINS.
+    seen: set[str] = set()
+    uniq_keys: list[str] = []
+    for k in sorted(keys, key=len, reverse=True):
+        lk = k.lower()
+        if lk not in seen:
+            seen.add(lk)
+            uniq_keys.append(k)
+
     cypher = f"""
-        MATCH (e:Entity)
-        WHERE toLower(e.name) IN [x IN $entities | toLower(x)] AND e.tenant_id = $tenant
+        MATCH (e:Entity {{tenant_id: $tenant}})
+        WHERE any(k IN $keywords WHERE k <> '' AND (
+            toLower(e.name) CONTAINS toLower(k)
+            OR (size(e.name) >= 4 AND toLower(k) CONTAINS toLower(e.name))
+            OR toLower(coalesce(e.description, '')) CONTAINS toLower(k)
+        ))
+        WITH DISTINCT e
+        ORDER BY size(e.name) DESC
+        LIMIT $seed_limit
         OPTIONAL MATCH (e)-[:RELATED*1..{depth}]-(neighbor:Entity)
-        WITH e, neighbor
-        OPTIONAL MATCH (chunk:Chunk)-[:MENTIONS]->(neighbor)
-        RETURN collect(DISTINCT {{
-            id: neighbor.id, name: neighbor.name, type: neighbor.type,
-            description: neighbor.description
-        }}) AS entities,
-        collect(DISTINCT {{
-            id: chunk.id, document_id: chunk.document_id, text: chunk.text
-        }}) AS chunks
-        LIMIT $limit
+        WHERE neighbor IS NULL OR neighbor.tenant_id = $tenant
+        WITH collect(DISTINCT e) + [n IN collect(DISTINCT neighbor) WHERE n IS NOT NULL] AS nodes
+        UNWIND nodes AS node
+        WITH DISTINCT node
+        RETURN collect({{
+            id: node.id, name: node.name, type: node.type,
+            description: node.description
+        }}) AS entities
     """
     driver = get_driver()
     async with driver.session() as s:
-        result = await s.run(cypher, entities=entities, tenant=tenant_id, limit=limit)
+        result = await s.run(
+            cypher,
+            keywords=uniq_keys,
+            tenant=tenant_id,
+            seed_limit=min(limit, 12),
+        )
         record = await result.single()
         if not record:
-            return {"entities": [], "chunks": []}
-        return {"entities": record["entities"], "chunks": record["chunks"]}
+            return {"entities": [], "relations": [], "chunks": []}
+        entities_out = [e for e in (record["entities"] or []) if e and e.get("name")]
+        rels = await fetch_relations_among(
+            [e["id"] for e in entities_out if e.get("id")], tenant_id
+        )
+        return {"entities": entities_out[:limit], "relations": rels, "chunks": []}
+
+
+async def fetch_relations_among(
+    entity_ids: list[str],
+    tenant_id: str,
+) -> list[dict[str, Any]]:
+    ids = [i for i in entity_ids if i]
+    if not ids:
+        return []
+    cypher = """
+        MATCH (a:Entity {tenant_id: $tenant})-[r:RELATED]->(b:Entity {tenant_id: $tenant})
+        WHERE a.id IN $ids AND b.id IN $ids
+        RETURN a.id AS source, b.id AS target,
+               coalesce(r.type, 'RELATED') AS type,
+               r.description AS description,
+               coalesce(r.weight, 1.0) AS weight
+    """
+    driver = get_driver()
+    async with driver.session() as s:
+        result = await s.run(cypher, ids=ids, tenant=tenant_id)
+        rows = await result.data()
+        return [
+            {
+                "source": row["source"],
+                "target": row["target"],
+                "type": row.get("type") or "RELATED",
+                "description": row.get("description"),
+                "weight": float(row.get("weight") or 1),
+            }
+            for row in rows
+        ]
+
+
+async def create_relation(
+    tenant_id: str,
+    source_id: str,
+    target_id: str,
+    rel_type: str = "RELATED",
+    description: str = "",
+) -> None:
+    driver = get_driver()
+    async with driver.session() as s:
+        rec = await s.run(
+            """
+            MATCH (a:Entity {id: $src, tenant_id: $tenant}),
+                  (b:Entity {id: $tgt, tenant_id: $tenant})
+            MERGE (a)-[rel:RELATED]->(b)
+            SET rel.type = $type, rel.description = $desc,
+                rel.weight = coalesce(rel.weight, 0) + 1
+            RETURN rel
+            """,
+            src=source_id,
+            tgt=target_id,
+            tenant=tenant_id,
+            type=rel_type or "RELATED",
+            desc=description or "",
+        )
+        if not await rec.single():
+            raise ValueError("entity not found or tenant mismatch")
+
+
+async def delete_relation(
+    tenant_id: str,
+    source_id: str,
+    target_id: str,
+) -> bool:
+    driver = get_driver()
+    async with driver.session() as s:
+        rec = await s.run(
+            """
+            MATCH (a:Entity {id: $src, tenant_id: $tenant})-[r:RELATED]->(b:Entity {id: $tgt, tenant_id: $tenant})
+            WITH collect(r) AS rels
+            FOREACH (x IN rels | DELETE x)
+            RETURN size(rels) AS deleted
+            """,
+            src=source_id,
+            tgt=target_id,
+            tenant=tenant_id,
+        )
+        row = await rec.single()
+        return bool(row and row["deleted"] > 0)
+
+
+async def local_query_by_chunks(
+    chunk_ids: list[str],
+    tenant_id: str,
+    depth: int = 2,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Find entities mentioned by chunks (fallback when name match fails)."""
+    if not isinstance(depth, int) or depth < 1 or depth > 3:
+        depth = 2
+    ids = [c for c in chunk_ids if c]
+    if not ids:
+        return {"entities": [], "relations": [], "chunks": []}
+    cypher = f"""
+        MATCH (c:Chunk)-[:MENTIONS]->(e:Entity {{tenant_id: $tenant}})
+        WHERE c.id IN $chunk_ids
+        WITH DISTINCT e
+        LIMIT $seed_limit
+        OPTIONAL MATCH (e)-[:RELATED*1..{depth}]-(neighbor:Entity)
+        WHERE neighbor IS NULL OR neighbor.tenant_id = $tenant
+        WITH collect(DISTINCT e) + [n IN collect(DISTINCT neighbor) WHERE n IS NOT NULL] AS nodes
+        UNWIND nodes AS node
+        WITH DISTINCT node
+        RETURN collect({{
+            id: node.id, name: node.name, type: node.type,
+            description: node.description
+        }}) AS entities
+    """
+    driver = get_driver()
+    async with driver.session() as s:
+        result = await s.run(
+            cypher,
+            chunk_ids=ids,
+            tenant=tenant_id,
+            seed_limit=min(limit, 12),
+        )
+        record = await result.single()
+        if not record:
+            return {"entities": [], "relations": [], "chunks": []}
+        entities_out = [e for e in (record["entities"] or []) if e and e.get("name")]
+        rels = await fetch_relations_among(
+            [e["id"] for e in entities_out if e.get("id")], tenant_id
+        )
+        return {"entities": entities_out[:limit], "relations": rels, "chunks": []}
+
+
+def sync_seed_cause_evidence(tenant_id: str, rows: list[dict[str, str]]) -> int:
+    """Import cause→evidence relations from CSV for predictable graph search."""
+    driver = get_sync_driver()
+    count = 0
+    with driver.session() as s:
+        for row in rows:
+            cause = (row.get("cause") or "").strip()
+            evidence = (row.get("evidence_element") or "").strip()
+            desc = (row.get("description") or "").strip()
+            if not cause or not evidence:
+                continue
+            for name, etype in ((cause, "cause"), (evidence, "evidence")):
+                s.run(
+                    """
+                    MERGE (e:Entity {id: $id})
+                    SET e.name = $name, e.type = $etype,
+                        e.description = coalesce(e.description, '') + $desc,
+                        e.tenant_id = $tenant
+                    """,
+                    id=f"{tenant_id}:{name}",
+                    name=name,
+                    etype=etype,
+                    desc=desc + " " if desc else "",
+                    tenant=tenant_id,
+                )
+            s.run(
+                """
+                MATCH (src:Entity {id: $src}), (tgt:Entity {id: $tgt})
+                MERGE (src)-[rel:RELATED {type: 'requires_evidence'}]->(tgt)
+                SET rel.description = $desc, rel.weight = coalesce(rel.weight, 0) + 1
+                """,
+                src=f"{tenant_id}:{cause}",
+                tgt=f"{tenant_id}:{evidence}",
+                desc=desc,
+            )
+            count += 1
+    return count
+
+
+async def count_entities(tenant_id: str) -> int:
+    driver = get_driver()
+    async with driver.session() as s:
+        result = await s.run(
+            "MATCH (e:Entity {tenant_id: $tenant}) RETURN count(e) AS c",
+            tenant=tenant_id,
+        )
+        record = await result.single()
+        return int(record["c"]) if record else 0
 
 
 async def delete_by_document(document_id: str) -> None:

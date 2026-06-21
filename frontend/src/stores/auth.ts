@@ -40,6 +40,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
     try {
       user.value = await fetchMe()
+      if (!user.value?.id || !user.value?.tenant_id) {
+        throw new Error('invalid user profile')
+      }
     } catch {
       clearToken()
       user.value = null
@@ -48,10 +51,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function ensureUser() {
+    if (user.value) return user.value
+    if (!localStorage.getItem('ks_token')) return null
+    await restore()
+    return user.value
+  }
+
   function logout() {
     clearToken()
     user.value = null
   }
 
-  return { user, loading, ready, login, register, restore, logout }
+  return { user, loading, ready, login, register, restore, ensureUser, logout }
 })

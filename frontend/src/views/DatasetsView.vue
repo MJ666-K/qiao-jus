@@ -2,12 +2,13 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createDataset, deleteDataset, listDatasets } from '@/api/datasets'
+import { DOC_TYPES, docTypeLabel } from '@/constants/docTypes'
 import type { Dataset } from '@/types'
 
 const loading = ref(false)
 const datasets = ref<Dataset[]>([])
 const dialogVisible = ref(false)
-const form = ref({ name: '', description: '' })
+const form = ref({ name: '', description: '', doc_type: 'law', scope: 'platform' })
 
 async function load() {
   loading.value = true
@@ -26,9 +27,10 @@ async function submit() {
   await createDataset({
     name: form.value.name.trim(),
     description: form.value.description.trim() || null,
+    metadata: { doc_type: form.value.doc_type, scope: form.value.scope },
   })
   dialogVisible.value = false
-  form.value = { name: '', description: '' }
+  form.value = { name: '', description: '', doc_type: 'law', scope: 'platform' }
   ElMessage.success('创建成功')
   await load()
 }
@@ -58,6 +60,7 @@ onMounted(load)
           <el-button link type="danger" @click="remove(ds.id, ds.name)">删除</el-button>
         </div>
         <p class="desc">{{ ds.description || '暂无描述' }}</p>
+        <el-tag size="small" type="info">{{ docTypeLabel(String(ds.metadata?.doc_type || '')) }}</el-tag>
         <div class="meta">ID: {{ ds.id.slice(0, 8) }} · {{ new Date(ds.created_at).toLocaleString('zh-CN') }}</div>
       </div>
     </div>
@@ -66,6 +69,11 @@ onMounted(load)
       <el-form label-position="top">
         <el-form-item label="名称" required>
           <el-input v-model="form.name" placeholder="如：劳动法规库" />
+        </el-form-item>
+        <el-form-item label="类型" required>
+          <el-select v-model="form.doc_type" style="width:100%">
+            <el-option v-for="t in DOC_TYPES.filter(x => x.scope==='platform')" :key="t.id" :label="t.label" :value="t.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" rows="3" />

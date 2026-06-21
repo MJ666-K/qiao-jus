@@ -43,6 +43,24 @@ def test_chunker_basic():
     assert sum(len(g) for g in groups) > 0
 
 
+def test_law_article_split():
+    from ingest.law_chunker import split_law_articles
+
+    text = """# 测试法
+【领域】劳动
+
+第39条
+用人单位可解除。
+
+第40条
+提前通知解除。
+"""
+    arts = split_law_articles(text)
+    assert len(arts) == 2
+    assert arts[0].article_no == "第39条"
+    assert arts[0].metadata["domain"] == "劳动"
+
+
 def test_rrf_fusion():
     from retrieve.hybrid import rrf_fusion
 

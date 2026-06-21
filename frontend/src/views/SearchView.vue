@@ -1,24 +1,33 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { search } from '@/api/search'
+import { notifyError, notifyInfo, notifyWarning } from '@/utils/notify'
 import type { SearchResult } from '@/types'
 
 const query = ref('')
 const topK = ref(10)
+const docType = ref('')
 const loading = ref(false)
 const result = ref<SearchResult | null>(null)
 
 async function runSearch() {
   if (!query.value.trim()) {
-    ElMessage.warning('请输入查询')
+    notifyWarning('请输入查询', '例如：试用期最长多久、违法解除劳动合同')
     return
   }
   loading.value = true
   try {
-    result.value = await search({ query: query.value.trim(), top_k: topK.value, use_graph: true })
+    result.value = await search({
+      query: query.value.trim(),
+      top_k: topK.value,
+      use_graph: true,
+      ...(docType.value ? { doc_type: docType.value } : {}),
+    })
+    if (result.value && !result.value.hits.length) {
+      notifyInfo('无匹配结果', '可换关键词、取消文档类型过滤，或确认文档已入库完成')
+    }
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '检索失败')
+    notifyError('检索失败', e instanceof Error ? e.message : undefined)
   } finally {
     loading.value = false
   }
@@ -36,6 +45,11 @@ async function runSearch() {
         clearable
         @keyup.enter="runSearch"
       />
+      <el-select v-model="docType" placeholder="文档类型" clearable style="width:140px">
+        <el-option label="法规 law" value="law" />
+        <el-option label="类案 case" value="case" />
+        <el-option label="合规 compliance" value="compliance" />
+      </el-select>
       <el-input-number v-model="topK" :min="1" :max="50" />
       <el-button type="primary" :loading="loading" @click="runSearch">搜索</el-button>
     </div>
@@ -46,7 +60,9 @@ async function runSearch() {
       <div v-if="result?.hits.length" class="hits">
         <div v-for="(hit, i) in result.hits" :key="hit.chunk_id" class="card-panel hit-card">
           <div class="hit-meta">
-            #{{ i + 1 }} · {{ hit.source || '未知来源' }} · score {{ hit.score.toFixed(4) }}
+            #{{ i + 1 }} · {{ hit.source || '未知来源' }}
+            <span v-if="hit.article_no"> · {{ hit.law_name }} {{ hit.article_no }}</span>
+            · score {{ hit.score.toFixed(4) }}
           </div>
           <pre class="text-pre">{{ hit.text }}</pre>
         </div>

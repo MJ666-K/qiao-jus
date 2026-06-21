@@ -2,13 +2,14 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { notifyError, notifySuccess } from '@/utils/notify'
 
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
-const email = ref('test@demo.com')
-const password = ref('test12345')
+const email = ref('seed@demo.com')
+const password = ref('seed12345')
 const tenantName = ref('demo')
 const mode = ref<'login' | 'register'>('login')
 const error = ref('')
@@ -18,13 +19,17 @@ async function submit() {
   try {
     if (mode.value === 'login') {
       await auth.login(email.value, password.value)
+      notifySuccess('登录成功', `欢迎，${auth.user?.email ?? email.value}`)
     } else {
       await auth.register(email.value, password.value, tenantName.value)
+      notifySuccess('注册成功', '已自动登录')
     }
     const redirect = (route.query.redirect as string) || '/dashboard'
     router.push(redirect)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '操作失败'
+    const msg = e instanceof Error ? e.message : '操作失败'
+    error.value = msg
+    notifyError(mode.value === 'login' ? '登录失败' : '注册失败', msg)
   }
 }
 </script>
@@ -46,10 +51,10 @@ async function submit() {
         <h2>{{ mode === 'login' ? '登录' : '注册' }}</h2>
         <el-form label-position="top" @submit.prevent="submit">
           <el-form-item label="邮箱">
-            <el-input v-model="email" type="email" placeholder="your@email.com" />
+            <el-input v-model="email" type="email" placeholder="seed@demo.com" />
           </el-form-item>
           <el-form-item label="密码">
-            <el-input v-model="password" type="password" show-password />
+            <el-input v-model="password" type="password" show-password placeholder="seed12345" />
           </el-form-item>
           <el-form-item v-if="mode === 'register'" label="租户名称">
             <el-input v-model="tenantName" placeholder="组织名称" />

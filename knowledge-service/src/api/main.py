@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import auth, datasets, documents, graph, search, stats
+from api.routes import auth, datasets, documents, graph, meta, search, stats
 from core.config import settings
 from storage.neo4j_client import close_driver, ensure_schema
 from storage.postgres import init_db
@@ -46,6 +46,7 @@ app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(graph.router)
 app.include_router(stats.router)
+app.include_router(meta.router)
 
 
 @app.get("/", tags=["meta"])

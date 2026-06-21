@@ -9,6 +9,7 @@ export async function listDatasets(): Promise<Dataset[]> {
 export async function createDataset(payload: {
   name: string
   description?: string | null
+  metadata?: Record<string, unknown>
 }): Promise<Dataset> {
   const { data } = await apiClient.post<Dataset>('/datasets', payload)
   return data

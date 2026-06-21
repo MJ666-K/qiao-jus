@@ -121,6 +121,21 @@ knowledge-service/
 
 前端 UI 已迁移至项目根目录 [`frontend/`](../frontend)，由 Vue SPA 独立部署。
 
+## 测试
+
+```bash
+# 单元 smoke
+pytest -q tests/
+
+# 端到端（有完整打印输出，推荐）
+./scripts/e2e_smoke_test.py
+
+# 导入 docs/data 测试数据
+./scripts/seed_platform_data.py
+```
+
+E2E 通过标准：健康检查、登录、检索命中、问答有内容。浏览器测试账号：`seed@demo.com` / `seed12345`。
+
 ## 开发
 
 ```bash

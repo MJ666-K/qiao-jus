@@ -18,10 +18,16 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (res) => res,
   (error: AxiosError<{ detail?: string }>) => {
-    const message =
+    const status = error.response?.status
+    let message =
       error.response?.data?.detail ||
       error.message ||
       '请求失败'
+    if (status === 500 && !error.response?.data?.detail) {
+      message = '后端服务未就绪（可能未启动或正在初始化），请执行 knowledge-service/scripts/start.sh 后重试'
+    } else if (!error.response) {
+      message = '无法连接后端 API，请确认 knowledge-service 已启动（端口 8000）'
+    }
     return Promise.reject(new Error(typeof message === 'string' ? message : JSON.stringify(message)))
   },
 )

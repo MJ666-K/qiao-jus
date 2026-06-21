@@ -41,7 +41,7 @@ async def ensure_collection() -> None:
     await _ensure_payload_indexes(client)
 
 
-_PAYLOAD_INDEXES = ["dataset_id", "tenant_id", "document_id", "parent_id"]
+_PAYLOAD_INDEXES = ["dataset_id", "tenant_id", "document_id", "parent_id", "doc_type", "domain"]
 
 
 async def _ensure_payload_indexes(client: AsyncQdrantClient) -> None:

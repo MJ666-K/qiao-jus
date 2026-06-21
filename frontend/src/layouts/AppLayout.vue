@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ChatDotRound,
@@ -8,7 +8,10 @@ import {
   Document,
   Grid,
   Search,
+  Setting,
   Share,
+  SwitchButton,
+  User,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -27,15 +30,31 @@ const navItems = [
 
 const activePath = computed(() => route.path)
 
-const tenantLabel = computed(() => {
-  const id = auth.user?.tenant_id
-  return id ? id.slice(0, 8) : '-'
+const avatarText = computed(() => {
+  const email = auth.user?.email
+  if (!email) return '?'
+  return email.charAt(0).toUpperCase()
 })
+
+function goSettings() {
+  router.push('/settings')
+}
+
+function handleUserCommand(cmd: string) {
+  if (cmd === 'settings') goSettings()
+  else if (cmd === 'logout') logout()
+}
 
 function logout() {
   auth.logout()
   router.push('/login')
 }
+
+onMounted(async () => {
+  if (!auth.user && localStorage.getItem('ks_token')) {
+    await auth.ensureUser()
+  }
+})
 </script>
 
 <template>
@@ -65,9 +84,31 @@ function logout() {
       </nav>
 
       <div class="sidebar-footer">
-        <div class="user-email">{{ auth.user?.email ?? '未登录' }}</div>
-        <div class="tenant-id">租户 {{ tenantLabel }}</div>
-        <el-button link type="danger" @click="logout">退出登录</el-button>
+        <el-dropdown v-if="auth.user" trigger="click" placement="top-start" @command="handleUserCommand">
+          <div class="user-trigger">
+            <el-avatar :size="36" class="user-avatar">{{ avatarText }}</el-avatar>
+            <span class="user-email">{{ auth.user.email }}</span>
+          </div>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="settings">
+                <el-icon><Setting /></el-icon>
+                系统配置
+              </el-dropdown-item>
+              <el-dropdown-item command="logout" divided>
+                <el-icon><SwitchButton /></el-icon>
+                退出登录
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+
+        <div v-else class="user-trigger guest" @click="router.push('/login')">
+          <el-avatar :size="36" class="user-avatar guest-avatar">
+            <el-icon><User /></el-icon>
+          </el-avatar>
+          <span class="user-email">未登录 · 点击登录</span>
+        </div>
       </div>
     </aside>
 
@@ -151,17 +192,39 @@ function logout() {
 .sidebar-footer {
   border-top: 1px solid #334155;
   padding-top: 14px;
-  font-size: 12px;
+}
+
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-trigger:hover {
+  background: rgb(255 255 255 / 6%);
+}
+
+.user-avatar {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff;
+  font-weight: 600;
+}
+
+.guest-avatar {
+  background: #475569;
 }
 
 .user-email {
+  font-size: 13px;
   color: #e2e8f0;
-  margin-bottom: 4px;
-}
-
-.tenant-id {
-  color: #64748b;
-  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main {
@@ -185,5 +248,11 @@ function logout() {
 .content {
   flex: 1;
   padding: 24px 28px;
+}
+
+:deep(.el-dropdown-menu__item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

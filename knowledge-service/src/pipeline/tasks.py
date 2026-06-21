@@ -11,7 +11,9 @@ from sqlalchemy import select
 from core.config import settings
 from core.llm import embed_texts
 from ingest.chunker import build_parent_child
+from ingest.doc_types import CASE, COMPLIANCE, GENERAL, LAW
 from ingest.parser import merge_blocks_to_text, parse_file
+from ingest.strategies import build_chunks_for_doc
 from models.base import Chunk, Document, IngestJob
 from pipeline.celery_app import celery_app
 from pipeline.graph_build import extract_entities_relations_sync
@@ -95,41 +97,67 @@ def chunk_and_embed(
     Children carry embeddings + parent_id in Qdrant payload; parents are stored
     only in Postgres so retrieval can expand a hit into a fuller context window."""
     text = parse_result["text"]
-    parents, parent_child_texts = build_parent_child(text)
-    if not parents:
-        raise ValueError("no chunks produced from text")
-
     with SyncSessionLocal() as session:
         try:
+            doc = session.get(Document, uuid.UUID(doc_id))
+            doc_type = (doc.metadata_ or {}).get("doc_type", GENERAL) if doc else GENERAL
+            doc_meta = dict(doc.metadata_ or {}) if doc else {}
+
+            units = build_chunks_for_doc(text, doc_type, doc_meta)
+            if not units:
+                raise ValueError("no chunks produced from text")
+
             _set_status(session, doc_id, CHUNKING)
             session.commit()
 
             parent_rows: list[Chunk] = []
-            for i, ptext in enumerate(parents):
-                parent = Chunk(
-                    document_id=uuid.UUID(doc_id),
-                    parent_id=None,
-                    chunk_index=i,
-                    text=ptext,
-                    token_count=len(ptext),
-                    char_count=len(ptext),
-                )
-                session.add(parent)
-                parent_rows.append(parent)
-            session.flush()
-
+            parent_index_map: dict[int, Chunk] = {}
             child_payload: list[Chunk] = []
-            global_idx = 0
-            for parent_idx, child_texts in enumerate(parent_child_texts):
-                parent = parent_rows[parent_idx]
-                for child_text in child_texts:
+            flat_types = {LAW, CASE, COMPLIANCE}
+
+            if doc_type in flat_types:
+                for i, u in enumerate([x for x in units if x.is_parent]):
                     c = Chunk(
                         document_id=uuid.UUID(doc_id),
-                        parent_id=parent.id,
+                        parent_id=None,
+                        chunk_index=i,
+                        text=u.text,
+                        token_count=len(u.text),
+                        char_count=len(u.text),
+                        metadata_=u.metadata,
+                    )
+                    session.add(c)
+                    child_payload.append(c)
+            else:
+                for u in units:
+                    if not u.is_parent:
+                        continue
+                    parent = Chunk(
+                        document_id=uuid.UUID(doc_id),
+                        parent_id=None,
+                        chunk_index=u.parent_index,
+                        text=u.text,
+                        token_count=len(u.text),
+                        char_count=len(u.text),
+                        metadata_=u.metadata,
+                    )
+                    session.add(parent)
+                    parent_rows.append(parent)
+                session.flush()
+                for p in parent_rows:
+                    parent_index_map[p.chunk_index] = p
+
+                global_idx = 0
+                for u in [x for x in units if not x.is_parent]:
+                    parent_row = parent_index_map.get(u.parent_index)
+                    c = Chunk(
+                        document_id=uuid.UUID(doc_id),
+                        parent_id=parent_row.id if parent_row else None,
                         chunk_index=global_idx,
-                        text=child_text,
-                        token_count=len(child_text),
-                        char_count=len(child_text),
+                        text=u.text,
+                        token_count=len(u.text),
+                        char_count=len(u.text),
+                        metadata_=u.metadata,
                     )
                     session.add(c)
                     child_payload.append(c)
@@ -153,9 +181,14 @@ def chunk_and_embed(
                         "document_id": doc_id,
                         "dataset_id": dataset_id,
                         "tenant_id": tenant_id,
-                        "parent_id": str(c.parent_id),
+                        "parent_id": str(c.parent_id) if c.parent_id else str(c.id),
                         "chunk_index": c.chunk_index,
                         "text": c.text,
+                        "doc_type": (c.metadata_ or {}).get("doc_type", doc_type),
+                        "law_name": (c.metadata_ or {}).get("law_name"),
+                        "article_no": (c.metadata_ or {}).get("article_no"),
+                        "domain": (c.metadata_ or {}).get("domain"),
+                        "cause": (c.metadata_ or {}).get("cause"),
                     },
                 })
             if points:

@@ -3,10 +3,9 @@ from sqlalchemy import select
 
 from api.deps import CurrentUserDep, SessionDep
 from core.llm import chat
-from pipeline.graph_build import extract_entities_relations
+from pipeline.graph_query import resolve_graph_entities
 from retrieve.hybrid import retrieve_children
 from schemas.search import AnswerResult, SearchHit, SearchQuery, SearchResult
-from storage.neo4j_client import local_query
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -17,6 +16,7 @@ async def search(payload: SearchQuery, user: CurrentUserDep):
         query=payload.query,
         tenant_id=user.tenant_id,
         dataset_id=str(payload.dataset_id) if payload.dataset_id else None,
+        doc_type=payload.doc_type,
         top_k=payload.top_k,
     )
     graph_ctx = []
@@ -35,6 +35,7 @@ async def answer(payload: SearchQuery, user: CurrentUserDep):
         query=payload.query,
         tenant_id=user.tenant_id,
         dataset_id=str(payload.dataset_id) if payload.dataset_id else None,
+        doc_type=payload.doc_type,
         top_k=payload.top_k,
     )
     graph_ctx = await _graph_context(payload.query, user.tenant_id, payload.dataset_id)
@@ -64,12 +65,8 @@ async def answer(payload: SearchQuery, user: CurrentUserDep):
 
 async def _graph_context(query: str, tenant_id: str, dataset_id) -> list[dict]:
     try:
-        ents, _ = await extract_entities_relations(query)
+        res = await resolve_graph_entities(query, tenant_id, depth=2, limit=20)
     except Exception:
         return []
-    if not ents:
-        return []
-    names = [e["name"] for e in ents]
-    res = await local_query(names, tenant_id=tenant_id, depth=2, limit=20)
     entities = res.get("entities", []) if res else []
     return [{"name": e.get("name"), "type": e.get("type"), "description": e.get("description")} for e in entities]

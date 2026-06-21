@@ -43,6 +43,9 @@ export interface SearchHit {
   document_id: string | null
   page: number | null
   metadata: Record<string, unknown>
+  doc_type?: string | null
+  article_no?: string | null
+  law_name?: string | null
 }
 
 export interface SearchResult {
@@ -69,6 +72,8 @@ export interface GraphEdge {
   source: string
   target: string
   type?: string
+  description?: string | null
+  weight?: number
 }
 
 export interface GraphQueryResult {

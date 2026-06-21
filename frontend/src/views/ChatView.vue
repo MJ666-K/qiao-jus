@@ -9,6 +9,7 @@ type Mode = 'local' | 'global'
 
 const query = ref('')
 const useGraph = ref(true)
+const docType = ref('law')
 const loading = ref(false)
 const mode = ref<Mode>('local')
 const localResult = ref<AnswerResult | null>(null)
@@ -26,6 +27,7 @@ async function askLocal() {
     localResult.value = await answer({
       query: query.value.trim(),
       use_graph: useGraph.value,
+      ...(docType.value ? { doc_type: docType.value } : {}),
     })
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '问答失败')
@@ -68,6 +70,11 @@ async function askGlobal() {
       />
       <div class="actions">
         <el-checkbox v-model="useGraph">启用图谱上下文</el-checkbox>
+        <el-select v-model="docType" placeholder="检索范围" style="width:140px">
+          <el-option label="法规" value="law" />
+          <el-option label="类案" value="case" />
+          <el-option label="全部" value="" />
+        </el-select>
         <el-button type="primary" :loading="loading && mode === 'local'" @click="askLocal">
           局部问答
         </el-button>

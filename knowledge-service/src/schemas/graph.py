@@ -30,3 +30,10 @@ class GraphQueryRequest(BaseModel):
     query: str = Field(min_length=1)
     dataset_id: UUID | None = None
     depth: int = Field(default=2, ge=1, le=3)
+
+
+class RelationMutation(BaseModel):
+    source: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    type: str = "RELATED"
+    description: str | None = None
