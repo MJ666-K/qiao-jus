@@ -1,5 +1,4 @@
 from functools import lru_cache
-from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -57,7 +56,23 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     rerank_top_k: int = 20
 
-    uploads_dir: Path = Path("data/uploads")
+    # ===== Aliyun OSS (required for file uploads) =====
+    # Without these, the upload endpoint will fail at first use.
+    oss_access_key_id: str | None = None
+    oss_access_key_secret: str | None = None
+    # e.g. https://oss-cn-shanghai.aliyuncs.com
+    oss_endpoint: str | None = None
+    oss_bucket_name: str | None = None
+    oss_prefix: str = "uploads/"
+
+    @property
+    def oss_enabled(self) -> bool:
+        return bool(
+            self.oss_access_key_id
+            and self.oss_access_key_secret
+            and self.oss_endpoint
+            and self.oss_bucket_name
+        )
 
     @property
     def is_dev(self) -> bool:
@@ -70,4 +85,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-settings.uploads_dir.mkdir(parents=True, exist_ok=True)

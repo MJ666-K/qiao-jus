@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -17,6 +16,7 @@ from ingest.strategies import build_chunks_for_doc
 from models.base import Chunk, Document, IngestJob
 from pipeline.celery_app import celery_app
 from pipeline.graph_build import extract_entities_relations_sync
+from storage import oss as oss_storage
 from storage.neo4j_client import sync_upsert_entities
 from storage.postgres_sync import SyncSessionLocal
 from storage.qdrant_client import make_point_id, upsert_points_sync
@@ -59,13 +59,17 @@ def _embed_batches(texts: list[str], batch: int = 16) -> list[list[float]]:
 
 
 @celery_app.task(name="pipeline.tasks.parse_document", bind=True, max_retries=2)
-def parse_document(self, doc_id: str, file_path: str) -> dict[str, Any]:
+def parse_document(self, doc_id: str, source_uri: str) -> dict[str, Any]:
     with SyncSessionLocal() as session:
         try:
             _set_status(session, doc_id, PARSING)
             session.commit()
 
-            blocks = parse_file(Path(file_path))
+            local_path = oss_storage.download_to_file(source_uri)
+            try:
+                blocks = parse_file(local_path)
+            finally:
+                local_path.unlink(missing_ok=True)
             text = merge_blocks_to_text(blocks)
             if not text:
                 raise ValueError("empty content after parse")
@@ -263,7 +267,7 @@ def build_graph(self, embed_result: dict[str, Any], doc_id: str) -> dict[str, An
 
 
 @celery_app.task(name="pipeline.tasks.reindex_document")
-def reindex_document(doc_id: str, file_path: str, dataset_id: str, tenant_id: str) -> str:
+def reindex_document(doc_id: str, source_uri: str, dataset_id: str, tenant_id: str) -> str:
     """Incremental re-index: wipe all chunks/qdrant points/graph nodes for the
     document, then run parse → chunk → embed → graph end-to-end. Used by the
     PUT /documents/{id}/reindex endpoint when the source file changes."""
@@ -284,7 +288,7 @@ def reindex_document(doc_id: str, file_path: str, dataset_id: str, tenant_id: st
             doc.error = None
         session.commit()
 
-    chain = parse_document.s(doc_id, file_path) | chunk_and_embed.s(
+    chain = parse_document.s(doc_id, source_uri) | chunk_and_embed.s(
         doc_id, dataset_id, tenant_id
     ) | build_graph.s(doc_id)
     chain.apply_async()

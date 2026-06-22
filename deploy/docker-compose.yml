@@ -99,8 +99,6 @@ services:
       - ../knowledge-service/.env
     ports:
       - "8000:8000"
-    volumes:
-      - ./data/uploads:/app/data/uploads
     networks:
       - fengqiao-net
 
@@ -117,8 +115,6 @@ services:
     environment: *app-env
     env_file:
       - ../knowledge-service/.env
-    volumes:
-      - ./data/uploads:/app/data/uploads
     networks:
       - fengqiao-net
 

@@ -1,17 +1,16 @@
 import hashlib
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from api.deps import CurrentUserDep, SessionDep
-from core.config import settings
 from models.base import Dataset, Document
 from ingest.doc_types import DOC_TYPE_LABELS, GENERAL
 from pipeline.tasks import build_graph, chunk_and_embed, parse_document, reindex_document
 from schemas.document import DocumentOut
+from storage import oss as oss_storage
 
 VALID_DOC_TYPES = set(DOC_TYPE_LABELS.keys())
 
@@ -73,9 +72,7 @@ async def upload_document(
     if dup:
         return DocumentOut.model_validate(_as_out(dup))
 
-    file_path = settings.uploads_dir / f"{uuid.uuid4().hex}_{file.filename}"
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    file_path.write_bytes(raw)
+    source_uri = oss_storage.upload_bytes(raw, file.filename or "file", file.content_type)
 
     ds_meta = dict(ds.metadata_ or {})
     doc_meta = {
@@ -91,7 +88,7 @@ async def upload_document(
     doc = Document(
         dataset_id=ds.id,
         title=file.filename or "untitled",
-        source_uri=str(file_path),
+        source_uri=source_uri,
         content_hash=content_hash,
         mime_type=file.content_type,
         status="pending",
@@ -101,7 +98,7 @@ async def upload_document(
     await session.commit()
     await session.refresh(doc)
 
-    chain = parse_document.s(str(doc.id), str(file_path)) | chunk_and_embed.s(
+    chain = parse_document.s(str(doc.id), source_uri) | chunk_and_embed.s(
         str(doc.id), str(ds.id), user.tenant_id
     ) | build_graph.s(str(doc.id))
     chain.apply_async()
@@ -131,6 +128,8 @@ async def delete_document(document_id: str, user: CurrentUserDep, session: Sessi
     doc = res.scalars().first()
     if not doc or str(doc.dataset.tenant_id) != user.tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
+    if oss_storage.is_oss_uri(doc.source_uri):
+        oss_storage.delete(doc.source_uri)
     await vec_delete(str(doc.id))
     await graph_delete(str(doc.id))
     await session.delete(doc)
@@ -147,8 +146,8 @@ async def reindex_document_endpoint(document_id: str, user: CurrentUserDep, sess
     doc = res.scalars().first()
     if not doc or str(doc.dataset.tenant_id) != user.tenant_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")
-    if not doc.source_uri or not Path(doc.source_uri).exists():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "source file not found")
+    if not doc.source_uri or not oss_storage.object_exists(doc.source_uri):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "source object not found in OSS")
     reindex_document.delay(
         str(doc.id), doc.source_uri, str(doc.dataset_id), user.tenant_id
     )

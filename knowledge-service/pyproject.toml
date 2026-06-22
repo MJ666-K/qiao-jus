@@ -22,6 +22,8 @@ dependencies = [
     # Vector & Graph
     "qdrant-client>=1.11.0",
     "neo4j>=5.23.0",
+    # Object storage (Aliyun OSS)
+    "oss2>=2.18.0",
     # LLM
     "litellm>=1.45.0",
     # Sparse retrieval (BM25 hybrid)
