@@ -20,6 +20,7 @@ data/
 
 .venv/
 venv/
+.run/
 .idea/
 .vscode/
 *.swp

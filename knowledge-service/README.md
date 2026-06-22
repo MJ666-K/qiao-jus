@@ -63,14 +63,11 @@ uv pip install -e .
 ### 常用命令
 
 ```bash
-./scripts/start.sh     # 一键启动（含健康检查）
+./scripts/start.sh     # 启动 docker 依赖 + API + Worker
 ./scripts/stop.sh      # 停止 API + Worker（保留 docker 依赖）
-./scripts/status.sh    # 查看所有服务状态 + 端口监听情况
-
-./scripts/start.sh --logs  # 启动并 tail 日志（Ctrl-C 脱离，服务继续跑）
 
 # 完全停止包括 docker 依赖：
-docker compose down
+docker compose -f ../deploy/docker-compose.yml down
 ```
 
 ### 日志位置
@@ -106,7 +103,7 @@ knowledge-service/
 │   └── adapters/    mcp_server
 ├── scripts/         start/stop/init_db
 ├── tests/           smoke test
-└── docker-compose.yml
+└── .env             配置（cp .env.example .env）
 ```
 
 前端 UI 已迁移至项目根目录 [`frontend/`](../frontend)，由 Vue SPA 独立部署。
