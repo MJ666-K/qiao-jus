@@ -9,10 +9,10 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(false)
   const ready = ref(false)
 
-  async function login(email: string, password: string) {
+  async function login(email: string, password: string, captchaKey: string, captchaCode: string) {
     loading.value = true
     try {
-      const token = await apiLogin(email, password)
+      const token = await apiLogin(email, password, captchaKey, captchaCode)
       setToken(token.access_token)
       user.value = await fetchMe()
     } finally {
@@ -20,10 +20,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function register(email: string, password: string, tenantName: string) {
+  async function register(
+    email: string,
+    password: string,
+    tenantName: string,
+    captchaKey: string,
+    captchaCode: string,
+  ) {
     loading.value = true
     try {
-      const token = await apiRegister(email, password, tenantName)
+      const token = await apiRegister(email, password, tenantName, captchaKey, captchaCode)
       setToken(token.access_token)
       user.value = await fetchMe()
     } finally {

@@ -252,14 +252,14 @@ onMounted(() => {
 }
 
 .module-card.active {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: #f97316;
+  background: #fff7ed;
 }
 
 .module-label {
   font-weight: 600;
   font-size: 14px;
-  color: #1e3a8a;
+  color: #9a3412;
   margin-bottom: 6px;
 }
 

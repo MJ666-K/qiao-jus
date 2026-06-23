@@ -1,7 +1,21 @@
 :root {
-  --brand-primary: #1d4ed8;
-  --brand-sidebar: #0f172a;
-  --brand-bg: #f1f5f9;
+  /* 品牌主色 - 活力橙红 */
+  --brand-primary: #f97316;
+  --brand-primary-dark: #ea580c;
+  --brand-primary-light: #fed7aa;
+
+  /* 背景 - 暖米白；侧边栏 - 中性深炭灰 */
+  --brand-bg: #fafaf9;
+  --brand-sidebar: #1f2937;
+
+  /* Element Plus 主色覆盖（橙红系各级明度） */
+  --el-color-primary: #f97316;
+  --el-color-primary-light-3: #fa9d5d;
+  --el-color-primary-light-5: #fcb98b;
+  --el-color-primary-light-7: #fdd5b8;
+  --el-color-primary-light-8: #fee3d0;
+  --el-color-primary-light-9: #fef1e7;
+  --el-color-primary-dark-2: #c75c12;
 }
 
 * {
@@ -19,9 +33,24 @@ body,
 }
 
 .page-title {
+  position: relative;
   margin: 0 0 20px;
+  padding-left: 14px;
   font-size: 22px;
   font-weight: 700;
+  color: #1f2937;
+}
+
+.page-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(180deg, #f97316, #ea580c);
+  border-radius: 2px;
 }
 
 .page-desc {
@@ -33,12 +62,70 @@ body,
 .card-panel {
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 8%);
-  padding: 20px;
+  border: 1px solid rgb(15 23 42 / 4%);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%), 0 4px 12px rgb(15 23 42 / 6%);
+  padding: 24px;
 }
 
 .text-pre {
   white-space: pre-wrap;
   word-break: break-word;
   line-height: 1.6;
+}
+
+.el-button--primary {
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  border: none;
+  box-shadow: 0 2px 8px rgb(249 115 22 / 22%);
+}
+
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background: linear-gradient(135deg, #fb923c, #ea580c);
+  box-shadow: 0 4px 12px rgb(249 115 22 / 30%);
+}
+
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover {
+  background: rgb(249 115 22 / 35%);
+  box-shadow: none;
+}
+
+.el-input__wrapper {
+  border-radius: 10px;
+  transition: box-shadow 0.2s;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px #f97316 inset, 0 0 0 3px rgb(249 115 22 / 12%) !important;
+}
+
+.el-textarea__inner {
+  border-radius: 10px;
+}
+
+.el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px #f97316 inset, 0 0 0 3px rgb(249 115 22 / 12%);
+}
+
+.el-card {
+  border-radius: 12px;
+  border: 1px solid rgb(15 23 42 / 4%);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 4%), 0 4px 12px rgb(15 23 42 / 6%);
+}
+
+.el-tag {
+  border-radius: 6px;
+}
+
+.el-tabs__active-bar {
+  background-color: #f97316;
+}
+
+.el-tabs__item.is-active {
+  color: #ea580c;
+}
+
+.el-tabs__item:hover {
+  color: #f97316;
 }

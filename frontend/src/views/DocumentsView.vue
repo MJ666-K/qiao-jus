@@ -258,6 +258,7 @@ onUnmounted(() => {
               生成报告
             </el-button>
             <el-button link type="primary" @click="showDetail(row.id)">详情</el-button>
+            <el-button link @click="router.push(`/documents/${row.id}/chunks`)">文本块</el-button>
             <template v-if="!isPlatformDoc(row)">
               <el-button link @click="reindex(row.id)">重建</el-button>
               <el-button link type="danger" @click="remove(row.id)">删除</el-button>
@@ -288,7 +289,7 @@ onUnmounted(() => {
 
 .upload-icon {
   font-size: 48px;
-  color: #2563eb;
+  color: #f97316;
 }
 
 .mt {

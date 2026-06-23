@@ -35,6 +35,12 @@ const router = createRouter({
           meta: { title: '文档管理' },
         },
         {
+          path: 'documents/:id/chunks',
+          name: 'chunk-editor',
+          component: () => import('@/views/ChunkEditorView.vue'),
+          meta: { title: '文本块管理' },
+        },
+        {
           path: 'search',
           name: 'search',
           component: () => import('@/views/SearchView.vue'),

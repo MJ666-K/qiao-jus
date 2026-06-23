@@ -17,31 +17,55 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
+interface NavItem {
+  path: string
+  label: string
+  icon: typeof Grid
+  exact?: boolean
+  adminOnly?: boolean
+}
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-const userNav = [
+const allNavItems: NavItem[] = [
   { path: '/dashboard', label: '概览', icon: DataAnalysis },
   { path: '/documents', label: '我的文档', icon: Files },
-  { path: '/reports/new', label: '生成报告', icon: Tools },
+  { path: '/reports/new', label: '生成报告', icon: Tools, exact: true },
   { path: '/reports', label: '我的报告', icon: DocumentCopy },
   { path: '/chat', label: '智能问答', icon: ChatDotRound },
+  { path: '/datasets', label: '平台知识库', icon: Collection, adminOnly: true },
+  { path: '/search', label: '检索测试', icon: Search, adminOnly: true },
+  { path: '/graph', label: '知识图谱', icon: Share, adminOnly: true },
+  { path: '/settings', label: '系统配置', icon: Setting },
 ]
 
-const adminNav = [
-  { path: '/datasets', label: '平台知识库', icon: Collection },
-  { path: '/search', label: '检索测试', icon: Search },
-  { path: '/graph', label: '知识图谱', icon: Share },
-]
+const visibleNavItems = computed(() =>
+  allNavItems.filter((item) => !item.adminOnly || auth.user?.role === 'admin'),
+)
 
-const activePath = computed(() => route.path)
+const isAdmin = computed(() => auth.user?.role === 'admin')
+const roleLabel = computed(() => (isAdmin.value ? '管理员' : '普通用户'))
+const roleTagType = computed(() => (isAdmin.value ? 'danger' : 'primary'))
+
+function isActive(item: NavItem): boolean {
+  if (item.exact) {
+    return route.path === item.path
+  }
+  if (item.path === '/reports') {
+    return route.path.startsWith('/reports') && !route.path.startsWith('/reports/new')
+  }
+  return route.path.startsWith(item.path) && route.path.length >= item.path.length
+}
 
 const avatarText = computed(() => {
-  const email = auth.user?.email
-  if (!email) return '?'
-  return email.charAt(0).toUpperCase()
+  const name = auth.user?.display_name || auth.user?.email
+  if (!name) return '?'
+  return name.charAt(0).toUpperCase()
 })
+
+const displayName = computed(() => auth.user?.display_name || auth.user?.email?.split('@')[0] || '—')
 
 function goSettings() {
   router.push('/settings')
@@ -49,12 +73,10 @@ function goSettings() {
 
 function handleUserCommand(cmd: string) {
   if (cmd === 'settings') goSettings()
-  else if (cmd === 'logout') logout()
-}
-
-function logout() {
-  auth.logout()
-  router.push('/login')
+  else if (cmd === 'logout') {
+    auth.logout()
+    router.push('/login')
+  }
 }
 
 onMounted(async () => {
@@ -68,9 +90,7 @@ onMounted(async () => {
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-icon">
-          <el-icon><Grid /></el-icon>
-        </div>
+        <div class="brand-icon">枫</div>
         <div>
           <div class="brand-title">枫桥智诉</div>
           <div class="brand-sub">法律智能辅助平台</div>
@@ -78,40 +98,26 @@ onMounted(async () => {
       </div>
 
       <nav class="nav">
-        <div class="nav-section">
-          <div class="nav-section-title">用户工作台</div>
-          <router-link
-            v-for="item in userNav"
-            :key="item.path"
-            :to="item.path"
-            class="nav-item"
-            :class="{ active: activePath.startsWith(item.path) }"
-          >
-            <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ item.label }}</span>
-          </router-link>
-        </div>
-
-        <div class="nav-section">
-          <div class="nav-section-title">管理员</div>
-          <router-link
-            v-for="item in adminNav"
-            :key="item.path"
-            :to="item.path"
-            class="nav-item"
-            :class="{ active: activePath.startsWith(item.path) }"
-          >
-            <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ item.label }}</span>
-          </router-link>
-        </div>
+        <router-link
+          v-for="item in visibleNavItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: isActive(item) }"
+        >
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </router-link>
       </nav>
 
       <div class="sidebar-footer">
         <el-dropdown v-if="auth.user" trigger="click" placement="top-start" @command="handleUserCommand">
           <div class="user-trigger">
             <el-avatar :size="36" class="user-avatar">{{ avatarText }}</el-avatar>
-            <span class="user-email">{{ auth.user.email }}</span>
+            <div class="user-info">
+              <span class="user-email">{{ displayName }}</span>
+              <el-tag :type="roleTagType" size="small" effect="dark" round>{{ roleLabel }}</el-tag>
+            </div>
           </div>
           <template #dropdown>
             <el-dropdown-menu>
@@ -160,6 +166,11 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   padding: 20px 14px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .brand {
@@ -173,7 +184,7 @@ onMounted(async () => {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: linear-gradient(135deg, #f97316, #ea580c);
   display: grid;
   place-items: center;
   font-size: 20px;
@@ -193,40 +204,30 @@ onMounted(async () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  overflow-y: auto;
-}
-
-.nav-section {
-  display: flex;
-  flex-direction: column;
   gap: 4px;
-}
-
-.nav-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0 12px 4px;
+  overflow-y: auto;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 11px 14px;
+  border-radius: 10px;
   color: #cbd5e1;
   text-decoration: none;
-  transition: background 0.15s;
+  transition: all 0.15s;
 }
 
-.nav-item:hover,
-.nav-item.active {
-  background: rgb(37 99 235 / 25%);
+.nav-item:hover {
+  background: rgb(255 255 255 / 6%);
   color: #fff;
+}
+
+.nav-item.active {
+  background: rgb(249 115 22 / 18%);
+  color: #fb923c;
+  font-weight: 600;
 }
 
 .sidebar-footer {
@@ -234,12 +235,18 @@ onMounted(async () => {
   padding-top: 14px;
 }
 
+.sidebar-footer :deep(.el-dropdown) {
+  display: block;
+  width: 100%;
+}
+
 .user-trigger {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -250,13 +257,20 @@ onMounted(async () => {
 
 .user-avatar {
   flex-shrink: 0;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: linear-gradient(135deg, #f97316, #ea580c);
   color: #fff;
   font-weight: 600;
 }
 
 .guest-avatar {
   background: #475569;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
 .user-email {
@@ -275,14 +289,31 @@ onMounted(async () => {
 }
 
 .topbar {
-  background: #fff;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 16px 28px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafaf9 100%);
+  border-bottom: 1px solid rgb(15 23 42 / 5%);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 3%);
+  padding: 18px 28px;
 }
 
 .topbar h1 {
+  position: relative;
   margin: 0;
+  padding-left: 14px;
   font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.topbar h1::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 18px;
+  background: linear-gradient(180deg, #f97316, #ea580c);
+  border-radius: 2px;
 }
 
 .content {

@@ -143,7 +143,7 @@ function render() {
     .enter()
     .append('path')
     .attr('fill', 'none')
-    .attr('stroke', (d) => (d.key === props.selectedRelationKey ? '#2563eb' : '#64748b'))
+    .attr('stroke', (d) => (d.key === props.selectedRelationKey ? '#f97316' : '#64748b'))
     .attr('stroke-width', (d) => (d.key === props.selectedRelationKey ? 2.5 : 1.8))
     .attr('marker-end', 'url(#graph-arrow)')
     .style('cursor', 'pointer')
@@ -225,7 +225,7 @@ function render() {
     .attr('fill', (d) => color(String(d.type || 'default')))
     .attr('stroke', (d) => {
       if (linkSourceId.value === d.id) return '#f59e0b'
-      if (props.selectedEntityId === d.id) return '#2563eb'
+      if (props.selectedEntityId === d.id) return '#f97316'
       return '#fff'
     })
     .attr('stroke-width', (d) =>
@@ -245,7 +245,7 @@ function render() {
       .select('circle')
       .attr('stroke', (d) => {
         if (linkSourceId.value === d.id) return '#f59e0b'
-        if (props.selectedEntityId === d.id) return '#2563eb'
+        if (props.selectedEntityId === d.id) return '#f97316'
         return '#fff'
       })
       .attr('stroke-width', (d) =>

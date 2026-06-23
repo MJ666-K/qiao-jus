@@ -7,8 +7,12 @@ export interface User {
   id: string
   tenant_id: string
   email: string
+  role: string
+  display_name?: string | null
   scopes: string[]
 }
+
+export type UserRole = 'user' | 'admin'
 
 export interface Dataset {
   id: string

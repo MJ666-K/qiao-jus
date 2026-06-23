@@ -315,17 +315,18 @@ onUnmounted(() => {
 <style scoped>
 .chat-page {
   display: flex;
-  height: calc(100vh - 140px);
+  height: calc(100vh - 130px);
+  margin: -24px -28px -24px -28px;
 }
 
 .conv-sidebar {
-  width: 260px;
+  width: 240px;
+  flex-shrink: 0;
   border-right: 1px solid #e2e8f0;
   background: #fff;
   display: flex;
   flex-direction: column;
-  margin: -24px -28px 0 0;
-  padding: 16px 12px;
+  padding: 14px 10px;
 }
 
 .conv-header {
@@ -361,12 +362,12 @@ onUnmounted(() => {
 }
 
 .conv-item:hover {
-  background: #f1f5f9;
+  background: #fafaf9;
 }
 
 .conv-item.active {
-  background: #dbeafe;
-  color: #1e3a8a;
+  background: #ffedd5;
+  color: #9a3412;
 }
 
 .conv-item-title {
@@ -424,9 +425,9 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0 12px;
-  border-bottom: 1px solid #f1f5f9;
-  margin-bottom: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -463,10 +464,10 @@ onUnmounted(() => {
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 4px;
+  padding: 8px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .msg-row {
@@ -482,15 +483,15 @@ onUnmounted(() => {
 }
 
 .bubble {
-  max-width: 75%;
-  padding: 12px 16px;
+  max-width: 80%;
+  padding: 10px 14px;
   border-radius: 12px;
-  background: #f1f5f9;
+  background: #f8fafc;
 }
 
 .msg-row.user .bubble {
-  background: #dbeafe;
-  color: #1e3a8a;
+  background: #ffedd5;
+  color: #9a3412;
 }
 
 .msg-row.assistant .bubble {
@@ -509,7 +510,7 @@ onUnmounted(() => {
 
 .streaming .cursor {
   animation: blink 1s infinite;
-  color: #2563eb;
+  color: #f97316;
 }
 
 @keyframes blink {
@@ -564,11 +565,11 @@ onUnmounted(() => {
 
 .input-area {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-end;
-  padding: 12px 0 0;
-  border-top: 1px solid #f1f5f9;
-  margin-top: 12px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
 }
 
 .input-area .el-input {

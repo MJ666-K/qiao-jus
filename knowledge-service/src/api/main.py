@@ -5,7 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import (
+    admin,
     auth,
+    chunks,
     conversations,
     datasets,
     documents,
@@ -13,6 +15,7 @@ from api.routes import (
     meta,
     reports,
     search,
+    settings_api,
     stats,
     ws,
 )
@@ -56,12 +59,15 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(datasets.router)
 app.include_router(documents.router)
+app.include_router(chunks.router)
 app.include_router(search.router)
 app.include_router(graph.router)
 app.include_router(stats.router)
 app.include_router(meta.router)
 app.include_router(reports.router)
 app.include_router(conversations.router)
+app.include_router(admin.router)
+app.include_router(settings_api.router)
 app.include_router(ws.router)
 
 

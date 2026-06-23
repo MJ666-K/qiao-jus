@@ -5,11 +5,16 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     tenant_name: str = Field(default="default", max_length=200)
+    display_name: str | None = Field(default=None, max_length=100)
+    captcha_key: str
+    captcha_code: str
 
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+    captcha_key: str
+    captcha_code: str
 
 
 class UserOut(BaseModel):
@@ -18,7 +23,14 @@ class UserOut(BaseModel):
     id: str
     tenant_id: str
     email: EmailStr
+    role: str = "user"
+    display_name: str | None = None
     scopes: list[str] = []
+
+
+class UserUpdate(BaseModel):
+    role: str | None = None
+    display_name: str | None = None
 
 
 class Token(BaseModel):
@@ -29,3 +41,8 @@ class Token(BaseModel):
 
 class TokenRefresh(BaseModel):
     refresh_token: str
+
+
+class CaptchaResponse(BaseModel):
+    captcha_key: str
+    image: str

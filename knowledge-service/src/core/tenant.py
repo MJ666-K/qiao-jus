@@ -6,6 +6,7 @@ from dataclasses import dataclass
 class CurrentUser:
     user_id: str
     tenant_id: str
+    role: str = "user"
     scopes: tuple[str, ...] = ()
 
 

@@ -20,17 +20,17 @@ const userStats = computed(() => ({
 }))
 
 const userCards = computed(() => [
-  { key: 'docs', label: '我的文档', value: userStats.value.docs, color: '#2563eb', action: () => router.push('/documents') },
+  { key: 'docs', label: '我的文档', value: userStats.value.docs, color: '#f97316', action: () => router.push('/documents') },
   { key: 'pendingDocs', label: '处理中', value: userStats.value.pendingDocs, color: '#d97706', action: () => router.push('/documents') },
-  { key: 'reports', label: '我的报告', value: userStats.value.reports, color: '#7c3aed', action: () => router.push('/reports') },
-  { key: 'doneReports', label: '报告完成', value: userStats.value.doneReports, color: '#059669', action: () => router.push('/reports') },
+  { key: 'reports', label: '我的报告', value: userStats.value.reports, color: '#ea580c', action: () => router.push('/reports') },
+  { key: 'doneReports', label: '报告完成', value: userStats.value.doneReports, color: '#fb923c', action: () => router.push('/reports') },
 ])
 
 const platformCards = [
-  { key: 'datasets', label: '平台知识库', color: '#0ea5e9' },
-  { key: 'documents', label: '平台文档', color: '#4f46e5' },
-  { key: 'documents_done', label: '已处理', color: '#059669' },
-  { key: 'chunks', label: '文本块', color: '#db2777' },
+  { key: 'datasets', label: '平台知识库', color: '#f97316' },
+  { key: 'documents', label: '平台文档', color: '#ea580c' },
+  { key: 'documents_done', label: '已处理', color: '#d97706' },
+  { key: 'chunks', label: '文本块', color: '#fb923c' },
 ] as const
 
 const recentReports = computed(() => myReports.value.slice(0, 5))
@@ -45,11 +45,11 @@ const reportTypeLabel: Record<string, string> = {
 }
 
 const moduleCards = [
-  { key: 'm1', label: '纠纷研判', desc: '上传纠纷材料，AI 生成案由/证据/调解建议', route: '/reports/new', color: '#2563eb' },
-  { key: 'm2', label: '合同审查', desc: '上传合同，AI 识别风险条款并给修改建议', route: '/reports/new', color: '#7c3aed' },
-  { key: 'm3', label: '用工排查', desc: '粘贴用工描述，规则引擎 + 法规库自动核查', route: '/reports/new', color: '#059669' },
-  { key: 'm4', label: '文书生成', desc: '输入案由与事实，生成起诉状草稿', route: '/reports/new', color: '#d97706' },
-  { key: 'm5', label: '证据指引', desc: '选择案由，输出证据清单 + 举证流程', route: '/reports/new', color: '#db2777' },
+  { key: 'm1', label: '纠纷研判', desc: '上传纠纷材料，AI 生成案由/证据/调解建议', route: '/reports/new', color: '#f97316' },
+  { key: 'm2', label: '合同审查', desc: '上传合同，AI 识别风险条款并给修改建议', route: '/reports/new', color: '#ea580c' },
+  { key: 'm3', label: '用工排查', desc: '粘贴用工描述，规则引擎 + 法规库自动核查', route: '/reports/new', color: '#d97706' },
+  { key: 'm4', label: '文书生成', desc: '输入案由与事实，生成起诉状草稿', route: '/reports/new', color: '#fb923c' },
+  { key: 'm5', label: '证据指引', desc: '选择案由，输出证据清单 + 举证流程', route: '/reports/new', color: '#c2410c' },
 ]
 
 onMounted(async () => {
@@ -233,17 +233,18 @@ onMounted(async () => {
 }
 
 .module-card {
-  border: 1px solid #e2e8f0;
-  border-left: 4px solid #2563eb;
-  border-radius: 8px;
-  padding: 14px;
+  border: 1px solid rgb(15 23 42 / 6%);
+  border-left: 4px solid #f97316;
+  border-radius: 12px;
+  padding: 16px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .module-card:hover {
-  background: #f8fafc;
-  transform: translateY(-1px);
+  background: #fff7ed;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(15 23 42 / 8%);
 }
 
 .module-label {
@@ -276,13 +277,13 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   padding: 10px 4px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgb(15 23 42 / 4%);
   cursor: pointer;
   transition: background 0.1s;
 }
 
 .list-row:hover {
-  background: #f8fafc;
+  background: #fff7ed;
 }
 
 .list-row:last-child {

@@ -35,6 +35,7 @@ async def get_current_user(
     current = CurrentUser(
         user_id=user_id,
         tenant_id=payload["tenant_id"],
+        role=payload.get("role", "user"),
         scopes=tuple(user.scopes or []),
     )
     set_current_user(current)
@@ -48,6 +49,14 @@ def require_scope(scope: str):
     async def checker(user: CurrentUserDep) -> CurrentUser:
         if scope != "read" and scope not in user.scopes and "admin" not in user.scopes:
             raise HTTPException(status.HTTP_403_FORBIDDEN, f"missing scope: {scope}")
+        return user
+    return checker
+
+
+def require_admin():
+    async def checker(user: CurrentUserDep) -> CurrentUser:
+        if user.role != "admin" and "admin" not in user.scopes:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "admin role required")
         return user
     return checker
 

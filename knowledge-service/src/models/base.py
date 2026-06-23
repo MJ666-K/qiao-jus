@@ -34,6 +34,8 @@ class User(Base):
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(200))
+    role: Mapped[str] = mapped_column(String(20), default="user", index=True)
+    display_name: Mapped[str | None] = mapped_column(String(100))
     scopes: Mapped[list] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

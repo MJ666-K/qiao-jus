@@ -22,12 +22,13 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def _create_token(sub: str, tenant_id: str, scopes: list[str], ttl: timedelta, kind: str) -> str:
+def _create_token(sub: str, tenant_id: str, scopes: list[str], ttl: timedelta, kind: str, role: str = "user") -> str:
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
         "sub": sub,
         "tenant_id": tenant_id,
         "scopes": scopes,
+        "role": role,
         "type": kind,
         "iat": now,
         "exp": now + ttl,
@@ -35,23 +36,25 @@ def _create_token(sub: str, tenant_id: str, scopes: list[str], ttl: timedelta, k
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=ALGORITHM)
 
 
-def create_access_token(user_id: str, tenant_id: str, scopes: list[str] | None = None) -> str:
+def create_access_token(user_id: str, tenant_id: str, scopes: list[str] | None = None, role: str = "user") -> str:
     return _create_token(
         user_id,
         tenant_id,
         scopes or [],
         timedelta(minutes=settings.jwt_access_ttl_minutes),
         "access",
+        role,
     )
 
 
-def create_refresh_token(user_id: str, tenant_id: str) -> str:
+def create_refresh_token(user_id: str, tenant_id: str, role: str = "user") -> str:
     return _create_token(
         user_id,
         tenant_id,
         [],
         timedelta(days=settings.jwt_refresh_ttl_days),
         "refresh",
+        role,
     )
 
 
