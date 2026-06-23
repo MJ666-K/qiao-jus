@@ -178,6 +178,8 @@ def chunk_and_embed(
                 pid = str(c.id)
                 c.qdrant_id = uuid.UUID(pid)
                 c.embedding_model = settings.embedding_model_id
+                c.scope = doc.scope if doc else "platform"
+                meta = c.metadata_ or {}
                 points.append({
                     "id": pid,
                     "vector": vec,
@@ -185,14 +187,23 @@ def chunk_and_embed(
                         "document_id": doc_id,
                         "dataset_id": dataset_id,
                         "tenant_id": tenant_id,
+                        "user_id": str(doc.user_id) if doc and doc.user_id else None,
+                        "scope": c.scope,
                         "parent_id": str(c.parent_id) if c.parent_id else str(c.id),
                         "chunk_index": c.chunk_index,
                         "text": c.text,
-                        "doc_type": (c.metadata_ or {}).get("doc_type", doc_type),
-                        "law_name": (c.metadata_ or {}).get("law_name"),
-                        "article_no": (c.metadata_ or {}).get("article_no"),
-                        "domain": (c.metadata_ or {}).get("domain"),
-                        "cause": (c.metadata_ or {}).get("cause"),
+                        "doc_type": meta.get("doc_type", doc_type),
+                        "law_name": meta.get("law_name"),
+                        "article_no": meta.get("article_no"),
+                        "level": meta.get("level"),
+                        "domain": meta.get("domain"),
+                        "cause": meta.get("cause"),
+                        "court_level": meta.get("court_level"),
+                        "year": meta.get("year"),
+                        "contract_type": meta.get("contract_type"),
+                        "dispute_type": meta.get("dispute_type"),
+                        "report_type": meta.get("report_type"),
+                        "risk_level": meta.get("risk_level"),
                     },
                 })
             if points:

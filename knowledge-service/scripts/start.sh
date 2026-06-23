@@ -4,6 +4,14 @@ cd "$(dirname "$0")/.."
 
 docker compose -f ../deploy/docker-compose.yml up -d postgres qdrant neo4j redis
 
+echo "==> Waiting for postgres..."
+until docker exec fengqiao-postgres pg_isready -U fengqiao -d fengqiao >/dev/null 2>&1; do
+  sleep 1
+done
+
+echo "==> Applying database migrations..."
+.venv/bin/alembic upgrade head
+
 pkill -f "uvicorn api.main:app" 2>/dev/null || true
 pkill -f "celery.*pipeline.celery_app" 2>/dev/null || true
 

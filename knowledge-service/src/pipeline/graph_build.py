@@ -7,17 +7,28 @@ from core.llm import chat_json
 
 logger = logging.getLogger(__name__)
 
+# Domain-typed entities + relations per docs/技术架构文档.md §4.1
 ENTITY_TYPES_HINT = (
-    "organization, person, product, technology, location, event, concept, document, date, money"
+    "LawArticle（法条）, CaseCause（案由）, EvidenceElement（证据要素）, "
+    "ComplianceObligation（合规义务）, LegalCase（具体案例）, "
+    "Person, Organization, Location, Date, Concept"
+)
+
+RELATION_TYPES_HINT = (
+    "APPLIES_TO（法条适用于某案由）, REQUIRES（案由需要某证据）, "
+    "CITES（案例引用某法条）, IMPLIES（法条蕴含某合规义务）, "
+    "SIMILAR_TO（相似关系）, RELATED（其他关系）"
 )
 
 _SYSTEM = (
-    "你是一个严谨的信息抽取引擎，从给定文本中抽取实体和实体关系，"
-    "输出严格 JSON。实体 name 用规范全称，去除代词；关系必须有 source/target/type；"
-    "description 简洁客观，不超过 50 字。"
+    "你是一个严谨的法律信息抽取引擎，从给定文本中抽取法律实体和实体关系，"
+    "输出严格 JSON。实体 name 用规范全称（如「劳动合同法第39条」「物业纠纷」），"
+    "去除代词；关系必须有 source/target/type；description 简洁客观，不超过 50 字。"
+    "type 字段必须从给定可选实体类型中选取；relation.type 必须从给定关系类型中选取。"
 )
 
 _USER_TMPL = """可选实体类型：{types}
+可选关系类型：{rel_types}
 
 文本：
 ---
@@ -37,7 +48,7 @@ async def extract_entities_relations(text: str) -> tuple[list[dict[str, Any]], l
         return [], []
     messages = [
         {"role": "system", "content": _SYSTEM},
-        {"role": "user", "content": _USER_TMPL.format(types=ENTITY_TYPES_HINT, text=text)},
+        {"role": "user", "content": _USER_TMPL.format(types=ENTITY_TYPES_HINT, rel_types=RELATION_TYPES_HINT, text=text)},
     ]
     try:
         data = await _call_async(messages)
@@ -57,7 +68,7 @@ def extract_entities_relations_sync(text: str) -> tuple[list[dict[str, Any]], li
         return [], []
     messages = [
         {"role": "system", "content": _SYSTEM},
-        {"role": "user", "content": _USER_TMPL.format(types=ENTITY_TYPES_HINT, text=text)},
+        {"role": "user", "content": _USER_TMPL.format(types=ENTITY_TYPES_HINT, rel_types=RELATION_TYPES_HINT, text=text)},
     ]
     try:
         data = chat_json(messages)
@@ -75,7 +86,7 @@ def extract_entities_relations_sync(text: str) -> tuple[list[dict[str, Any]], li
 def _normalize_entity(e: dict[str, Any]) -> dict[str, Any]:
     return {
         "name": str(e["name"]).strip(),
-        "type": str(e.get("type") or "concept").strip(),
+        "type": str(e.get("type") or "Concept").strip(),
         "description": str(e.get("description") or "").strip(),
     }
 

@@ -16,11 +16,13 @@ class DocumentOut(BaseModel):
 
     id: UUID
     dataset_id: UUID
+    user_id: UUID | None = None
     title: str
     source_uri: str | None
     mime_type: str | None
     content_hash: str | None
     status: str
+    scope: str = "platform"
     error: str | None
     acl: dict[str, Any]
     metadata: dict[str, Any]

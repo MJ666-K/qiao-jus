@@ -25,16 +25,27 @@ async def retrieve_children(
     dataset_id: str | None = None,
     doc_type: str | None = None,
     top_k: int | None = None,
+    user_id: str | None = None,
+    scope: str | None = None,
 ) -> list[dict[str, Any]]:
     """Hybrid retrieval over child chunks. Combines Qdrant dense search with a
     BM25 sparse index built from current tenant's chunks via Reciprocal Rank
-    Fusion. Returns fused, reranked hits with parent context attached."""
+    Fusion. Returns fused, reranked hits with parent context attached.
+
+    When ``user_id`` is given, restricts to that user's private docs (scope=user
+    AND user_id matches) PLUS all platform docs (scope=platform). When ``scope``
+    is given explicitly ('platform' or 'user'), filters to that scope only.
+    """
     top_k = top_k or settings.search_top_k
     dense_filters: dict[str, Any] = {"tenant_id": tenant_id}
     if dataset_id:
         dense_filters["dataset_id"] = dataset_id
     if doc_type:
         dense_filters["doc_type"] = doc_type
+    if scope:
+        dense_filters["scope"] = scope
+    elif user_id:
+        dense_filters["_user_scope"] = user_id
 
     query_vec_list = await asyncio.to_thread(embed_texts, [query])
     query_vec = query_vec_list[0]

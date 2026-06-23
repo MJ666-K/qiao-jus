@@ -6,7 +6,7 @@ celery_app = Celery(
     "knowledge",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["pipeline.tasks"],
+    include=["pipeline.tasks", "pipeline.report_tasks"],
 )
 
 celery_app.conf.update(
@@ -24,5 +24,6 @@ celery_app.conf.update(
         "pipeline.tasks.chunk_and_embed": {"queue": "ingest"},
         "pipeline.tasks.build_graph": {"queue": "graph"},
         "pipeline.tasks.reindex_document": {"queue": "ingest"},
+        "pipeline.report_tasks.generate_report": {"queue": "ingest"},
     },
 )

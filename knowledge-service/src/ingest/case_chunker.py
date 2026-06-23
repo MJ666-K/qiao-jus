@@ -81,6 +81,25 @@ _CASE_META_RE = {
     "year": re.compile(r"【裁判年份】\s*(\d{4})"),
 }
 
+_COURT_LEVEL_KEYWORDS = [
+    ("最高人民法院", "最高"),
+    ("高级人民法院", "高级"),
+    ("中级人民法院", "中级"),
+    ("基层人民法院", "基层"),
+    ("互联网法院", "专门"),
+    ("海事法院", "专门"),
+    ("知识产权法院", "专门"),
+]
+
+
+def _infer_court_level(court: str | None) -> str | None:
+    if not court:
+        return None
+    for keyword, level in _COURT_LEVEL_KEYWORDS:
+        if keyword in court:
+            return level
+    return "基层"
+
 
 def parse_case_header(text: str) -> dict:
     meta: dict = {"doc_type": "case"}
@@ -91,4 +110,7 @@ def parse_case_header(text: str) -> dict:
         m = pat.search(text)
         if m:
             meta[key] = m.group(1).strip()
+    inferred_level = _infer_court_level(meta.get("court"))
+    if inferred_level:
+        meta["court_level"] = inferred_level
     return meta

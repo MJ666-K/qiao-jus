@@ -5,15 +5,19 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from core.config import settings
 from models.base import Base
 
+# NullPool is required so the engine can be safely reused across event loops
+# created by asyncio.run() inside Celery tasks. With the default QueuePool,
+# asyncpg binds pooled connections to the first loop they were used in,
+# causing "Future attached to a different loop" errors on subsequent tasks.
 engine = create_async_engine(
     settings.database_url,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    poolclass=NullPool,
     echo=False,
 )
 

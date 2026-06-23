@@ -4,8 +4,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import auth, datasets, documents, graph, meta, search, stats
+from api.routes import (
+    auth,
+    conversations,
+    datasets,
+    documents,
+    graph,
+    meta,
+    reports,
+    search,
+    stats,
+    ws,
+)
 from core.config import settings
+from skills import load_skills
 from storage.neo4j_client import close_driver, ensure_schema
 from storage.postgres import init_db
 from storage.qdrant_client import ensure_collection
@@ -17,6 +29,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("starting knowledge-service (%s)", settings.app_env)
+    load_skills()
     await init_db()
     await ensure_collection()
     await ensure_schema()
@@ -28,7 +41,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Knowledge Service",
     description="Knowledge base + Knowledge graph service with modular Skills architecture",
-    version="0.5.0",
+    version="0.6.0",
     lifespan=lifespan,
 )
 
@@ -47,11 +60,14 @@ app.include_router(search.router)
 app.include_router(graph.router)
 app.include_router(stats.router)
 app.include_router(meta.router)
+app.include_router(reports.router)
+app.include_router(conversations.router)
+app.include_router(ws.router)
 
 
 @app.get("/", tags=["meta"])
 async def root():
-    return {"name": "knowledge-service", "version": "0.5.0", "docs": "/docs"}
+    return {"name": "knowledge-service", "version": "0.6.0", "docs": "/docs"}
 
 
 @app.get("/health", tags=["meta"])

@@ -15,14 +15,14 @@ _sync_client: QdrantClient | None = None
 def get_client() -> AsyncQdrantClient:
     global _client
     if _client is None:
-        _client = AsyncQdrantClient(url=settings.qdrant_url, prefer_grpc=True)
+        _client = AsyncQdrantClient(url=settings.qdrant_url, prefer_grpc=False)
     return _client
 
 
 def get_sync_client() -> QdrantClient:
     global _sync_client
     if _sync_client is None:
-        _sync_client = QdrantClient(url=settings.qdrant_url, prefer_grpc=True)
+        _sync_client = QdrantClient(url=settings.qdrant_url, prefer_grpc=False)
     return _sync_client
 
 
@@ -80,11 +80,32 @@ async def search_dense(
 ) -> list[qm.ScoredPoint]:
     # Qdrant client >=1.10 deprecated `search()` in favor of `query_points()`.
     client = get_client()
+    user_id = filters.pop("_user_scope", None)
     must = [qm.FieldCondition(key=k, match=qm.MatchValue(value=str(v))) for k, v in filters.items()]
+    built_filter: qm.Filter | None = None
+    if user_id:
+        # (scope=platform) OR (scope=user AND user_id=<user_id>)
+        built_filter = qm.Filter(
+            must=must,
+            should=[
+                qm.Filter(
+                    must=[qm.FieldCondition(key="scope", match=qm.MatchValue(value="platform"))]
+                ),
+                qm.Filter(
+                    must=[
+                        qm.FieldCondition(key="scope", match=qm.MatchValue(value="user")),
+                        qm.FieldCondition(key="user_id", match=qm.MatchValue(value=user_id)),
+                    ]
+                ),
+            ],
+            min_should=1,
+        )
+    elif must:
+        built_filter = qm.Filter(must=must)
     result = await client.query_points(
         settings.qdrant_collection,
         query=vector,
-        query_filter=qm.Filter(must=must) if must else None,
+        query_filter=built_filter,
         limit=top_k,
         with_payload=True,
     )

@@ -13,6 +13,7 @@ from schemas.document import DocumentOut
 from storage import oss as oss_storage
 
 VALID_DOC_TYPES = set(DOC_TYPE_LABELS.keys())
+USER_DOC_TYPES = {"contract", "dispute", "report"}
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -74,11 +75,12 @@ async def upload_document(
 
     source_uri = oss_storage.upload_bytes(raw, file.filename or "file", file.content_type)
 
+    is_user_doc = doc_type in USER_DOC_TYPES
     ds_meta = dict(ds.metadata_ or {})
     doc_meta = {
         "doc_type": doc_type,
         "original_filename": file.filename,
-        "scope": ds_meta.get("scope", "platform"),
+        "scope": ds_meta.get("scope", "user" if is_user_doc else "platform"),
     }
     if ds_meta.get("domain"):
         doc_meta["domain"] = ds_meta["domain"]
@@ -87,11 +89,13 @@ async def upload_document(
 
     doc = Document(
         dataset_id=ds.id,
+        user_id=uuid.UUID(user.user_id) if is_user_doc else None,
         title=file.filename or "untitled",
         source_uri=source_uri,
         content_hash=content_hash,
         mime_type=file.content_type,
         status="pending",
+        scope="user" if is_user_doc else "platform",
         metadata_=doc_meta,
     )
     session.add(doc)
@@ -162,11 +166,13 @@ def _as_out(doc: Document) -> dict:
     return {
         "id": doc.id,
         "dataset_id": doc.dataset_id,
+        "user_id": doc.user_id,
         "title": doc.title,
         "source_uri": doc.source_uri,
         "mime_type": doc.mime_type,
         "content_hash": doc.content_hash,
         "status": doc.status,
+        "scope": doc.scope,
         "error": doc.error,
         "acl": doc.acl,
         "metadata": doc.metadata_,

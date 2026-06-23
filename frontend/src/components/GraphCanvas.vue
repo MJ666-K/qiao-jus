@@ -149,8 +149,8 @@ function render() {
     .style('cursor', 'pointer')
     .on('click', (event, d) => {
       event.stopPropagation()
-      const src = typeof d.source === 'object' ? d.source.id : String(d.source)
-      const tgt = typeof d.target === 'object' ? d.target.id : String(d.target)
+      const src = typeof d.source === 'object' ? (d.source as { id: string }).id : String(d.source)
+      const tgt = typeof d.target === 'object' ? (d.target as { id: string }).id : String(d.target)
       emit('selectRelation', {
         source: src,
         target: tgt,

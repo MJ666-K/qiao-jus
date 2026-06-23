@@ -66,11 +66,15 @@ class Document(Base):
     dataset_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("datasets.id", ondelete="CASCADE"), index=True
     )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
     title: Mapped[str] = mapped_column(String(500))
     source_uri: Mapped[str | None] = mapped_column(Text)
     content_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     mime_type: Mapped[str | None] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    scope: Mapped[str] = mapped_column(String(10), default="platform", index=True)
     error: Mapped[str | None] = mapped_column(Text)
     acl: Mapped[dict] = mapped_column(JSONB, default=dict)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
@@ -104,6 +108,7 @@ class Chunk(Base):
     char_count: Mapped[int | None]
     qdrant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     embedding_model: Mapped[str | None] = mapped_column(String(100))
+    scope: Mapped[str] = mapped_column(String(10), default="platform", index=True)
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -129,3 +134,99 @@ class IngestJob(Base):
     result: Mapped[dict | None] = mapped_column(JSONB)
 
     document: Mapped[Document] = relationship(back_populates="jobs")
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    source_doc_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="SET NULL"), index=True
+    )
+    type: Mapped[str] = mapped_column(String(50), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    error: Mapped[str | None] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
+    content_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    citations_json: Mapped[list] = mapped_column(JSONB, default=list)
+    suggested_questions: Mapped[list] = mapped_column(JSONB, default=list)
+    confidence: Mapped[int] = mapped_column(default=0)
+    graph_path: Mapped[list] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    source_document: Mapped[Document | None] = relationship(foreign_keys=[source_doc_id])
+    conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="report", cascade="all, delete-orphan"
+    )
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("reports.id", ondelete="SET NULL"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(500), default="新对话")
+    track: Mapped[str | None] = mapped_column(String(30))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    report: Mapped[Report | None] = relationship(back_populates="conversations")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at"
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text)
+    confidence: Mapped[int | None] = mapped_column()
+    suggested_questions: Mapped[list] = mapped_column(JSONB, default=list)
+    citations_json: Mapped[list] = mapped_column(JSONB, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    citations: Mapped[list["MessageCitation"]] = relationship(
+        back_populates="message", cascade="all, delete-orphan"
+    )
+
+
+class MessageCitation(Base):
+    __tablename__ = "message_citations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), index=True
+    )
+    chunk_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    document_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    source_type: Mapped[str] = mapped_column(String(20))
+    source_title: Mapped[str] = mapped_column(String(500))
+    excerpt: Mapped[str | None] = mapped_column(Text)
+    page: Mapped[int | None] = mapped_column()
+
+    message: Mapped[Message] = relationship(back_populates="citations")

@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 import litellm
@@ -62,3 +63,25 @@ def chat_json(messages: list[dict[str, str]], *, temperature: float = 0.1) -> An
         if start >= 0 and end > start:
             return json.loads(raw[start : end + 1])
         raise
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+def stream_chat(
+    messages: list[dict[str, str]],
+    *,
+    temperature: float = 0.4,
+    max_tokens: int | None = None,
+) -> Iterator[str]:
+    kwargs: dict[str, Any] = {
+        "model": f"openai/{settings.llm_model_id}",
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens or settings.llm_max_tokens,
+        "stream": True,
+        **_common_kwargs(),
+    }
+    resp = litellm.completion(**kwargs)
+    for chunk in resp:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta

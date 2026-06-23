@@ -53,6 +53,30 @@ const router = createRouter({
           meta: { title: '智能问答' },
         },
         {
+          path: 'chat/:conversationId?',
+          name: 'chat-with-conversation',
+          component: () => import('@/views/ChatView.vue'),
+          meta: { title: '智能问答' },
+        },
+        {
+          path: 'reports',
+          name: 'reports-list',
+          component: () => import('@/views/ReportsListView.vue'),
+          meta: { title: '分析报告' },
+        },
+        {
+          path: 'reports/new',
+          name: 'report-new',
+          component: () => import('@/views/NewReportView.vue'),
+          meta: { title: '生成报告' },
+        },
+        {
+          path: 'reports/:id',
+          name: 'report-view',
+          component: () => import('@/views/ReportView.vue'),
+          meta: { title: '报告详情' },
+        },
+        {
           path: 'settings',
           name: 'settings',
           component: () => import('@/views/SettingsView.vue'),

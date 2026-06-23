@@ -23,11 +23,13 @@ export interface Dataset {
 export interface DocumentItem {
   id: string
   dataset_id: string
+  user_id?: string | null
   title: string
   source_uri: string | null
   mime_type: string | null
   content_hash: string | null
   status: string
+  scope?: string
   error: string | null
   acl: Record<string, unknown> | null
   metadata: Record<string, unknown> | null
@@ -115,3 +117,129 @@ export type DocStatus =
   | 'graphing'
   | 'done'
   | 'failed'
+
+export type ReportType =
+  | 'contract_review'
+  | 'dispute_analysis'
+  | 'labor_risk'
+  | 'litigation_draft'
+  | 'evidence_checklist'
+
+export type ReportStatus = 'pending' | 'generating' | 'done' | 'failed'
+
+export type SourceType = 'law' | 'case' | 'report' | 'user_doc' | 'compliance' | 'graph'
+
+export interface Citation {
+  chunk_id?: string | null
+  document_id?: string | null
+  source_type: SourceType
+  source_title: string
+  excerpt?: string | null
+  page?: number | null
+  score?: number | null
+}
+
+export interface RiskItem {
+  level: '高' | '中' | '低'
+  desc: string
+  law_ref?: string | null
+  chunk_id?: string | null
+  suggestion?: string | null
+}
+
+export interface EvidenceItem {
+  name: string
+  level: '高' | '中' | '低'
+  purpose?: string | null
+  collect_tip?: string | null
+}
+
+export interface LitigationParties {
+  plaintiff?: string | null
+  defendant?: string | null
+}
+
+export interface Report {
+  id: string
+  tenant_id: string
+  user_id: string
+  source_doc_id?: string | null
+  type: ReportType
+  status: ReportStatus
+  error?: string | null
+  summary?: string | null
+  risk_items: RiskItem[]
+  citations: Citation[]
+  suggested_questions: string[]
+  confidence: number
+  graph_path: string[]
+  parties?: LitigationParties | null
+  claims?: string[]
+  facts?: string[]
+  evidence_list?: Array<{ name?: string; purpose?: string }>
+  evidence_items?: EvidenceItem[]
+  procedure_steps?: string[]
+  content_json: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export interface AnalyzeRequest {
+  source_doc_id?: string
+  text?: string
+  title?: string
+  report_type?: ReportType
+  extra_context?: string
+}
+
+export interface ConversationSummary {
+  id: string
+  title: string
+  report_id?: string | null
+  track?: string | null
+  message_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  confidence?: number | null
+  suggested_questions: string[]
+  citations: Citation[]
+  created_at: string
+}
+
+export interface Conversation {
+  id: string
+  tenant_id: string
+  user_id: string
+  report_id?: string | null
+  title: string
+  track?: string | null
+  created_at: string
+  updated_at: string
+  messages: ChatMessage[]
+}
+
+export interface ConversationCreate {
+  title?: string
+  report_id?: string
+  track?: string
+}
+
+export type WsClientMessage =
+  | { type: 'init'; conversation_id?: string; report_id?: string }
+  | { type: 'message'; content: string }
+  | { type: 'bind_report'; report_id?: string }
+  | { type: 'stop' }
+
+export type WsServerMessage =
+  | { type: 'connected'; session_id: string; report_id?: string | null }
+  | { type: 'token'; content: string }
+  | { type: 'citation'; chunk_id?: string; document_id?: string; source_type: SourceType; source_title: string; excerpt?: string; page?: number }
+  | { type: 'done'; message_id: string; confidence: number; citations: Citation[]; suggested_questions: string[] }
+  | { type: 'report_bound'; report_id?: string | null }
+  | { type: 'error'; message: string }

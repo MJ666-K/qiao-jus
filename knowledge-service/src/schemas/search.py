@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -13,6 +13,19 @@ class SearchQuery(BaseModel):
     use_graph: bool = True
 
 
+SourceType = Literal["law", "case", "report", "user_doc", "compliance", "graph"]
+
+
+class Citation(BaseModel):
+    chunk_id: str | None = None
+    document_id: str | None = None
+    source_type: SourceType
+    source_title: str
+    excerpt: str | None = None
+    page: int | None = None
+    score: float | None = None
+
+
 class SearchHit(BaseModel):
     chunk_id: str
     text: str
@@ -24,6 +37,9 @@ class SearchHit(BaseModel):
     doc_type: str | None = None
     article_no: str | None = None
     law_name: str | None = None
+    source_type: SourceType | None = None
+    source_title: str | None = None
+    excerpt: str | None = None
 
 
 class SearchResult(BaseModel):
@@ -36,4 +52,7 @@ class AnswerResult(BaseModel):
     query: str
     answer: str
     sources: list[SearchHit] = []
+    citations: list[Citation] = []
     graph_entities: list[str] = []
+    suggested_questions: list[str] = []
+    confidence: int | None = None

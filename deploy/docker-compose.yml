@@ -33,7 +33,7 @@ services:
       - fengqiao-net
 
   qdrant:
-    image: qdrant/qdrant:v1.7.4
+    image: docker.m.daocloud.io/qdrant/qdrant:v1.12.4
     container_name: fengqiao-qdrant
     restart: unless-stopped
     ports:
@@ -42,7 +42,7 @@ services:
     volumes:
       - ./data/qdrant:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 10s
       timeout: 5s
       retries: 3

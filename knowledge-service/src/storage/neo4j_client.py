@@ -84,6 +84,9 @@ async def upsert_entities(
             chunk=chunk_id,
         )
         for e in entities:
+            etype = e.get("type", "Concept") or "Concept"
+            # Sanitize type into a Neo4j-label-safe identifier (letters/digits/_).
+            safe_label = "".join(ch if ch.isalnum() else "_" for ch in etype) or "Concept"
             await s.run(
                 """
                 MERGE (e:Entity {id: $id})
@@ -91,16 +94,19 @@ async def upsert_entities(
                     e.description = coalesce(e.description, '') + coalesce($desc, ''),
                     e.tenant_id = $tenant, e.dataset_id = $dataset
                 WITH e
+                CALL apoc.create.addLabels(e, [$extra_label]) YIELD node
+                WITH node
                 MATCH (c:Chunk {id: $chunk})
-                MERGE (c)-[:MENTIONS]->(e)
+                MERGE (c)-[:MENTIONS]->(node)
                 """,
                 id=f"{tenant_id}:{e['name']}",
                 name=e["name"],
-                type=e.get("type", "concept"),
+                type=etype,
                 desc=e.get("description", ""),
                 tenant=tenant_id,
                 dataset=dataset_id,
                 chunk=chunk_id,
+                extra_label=safe_label,
             )
         for r in relations:
             src = f"{tenant_id}:{r['source']}"
@@ -388,6 +394,8 @@ def sync_upsert_entities(
             chunk=chunk_id,
         )
         for e in entities:
+            etype = e.get("type", "Concept") or "Concept"
+            safe_label = "".join(ch if ch.isalnum() else "_" for ch in etype) or "Concept"
             s.run(
                 """
                 MERGE (e:Entity {id: $id})
@@ -395,16 +403,19 @@ def sync_upsert_entities(
                     e.description = coalesce(e.description, '') + coalesce($desc, ''),
                     e.tenant_id = $tenant, e.dataset_id = $dataset
                 WITH e
+                CALL apoc.create.addLabels(e, [$extra_label]) YIELD node
+                WITH node
                 MATCH (c:Chunk {id: $chunk})
-                MERGE (c)-[:MENTIONS]->(e)
+                MERGE (c)-[:MENTIONS]->(node)
                 """,
                 id=f"{tenant_id}:{e['name']}",
                 name=e["name"],
-                type=e.get("type", "concept"),
+                type=etype,
                 desc=e.get("description", ""),
                 tenant=tenant_id,
                 dataset=dataset_id,
                 chunk=chunk_id,
+                extra_label=safe_label,
             )
         for r in relations:
             src = f"{tenant_id}:{r['source']}"

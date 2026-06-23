@@ -5,12 +5,14 @@ import {
   ChatDotRound,
   Collection,
   DataAnalysis,
-  Document,
+  DocumentCopy,
+  Files,
   Grid,
   Search,
   Setting,
   Share,
   SwitchButton,
+  Tools,
   User,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -19,13 +21,18 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 
-const navItems = [
+const userNav = [
   { path: '/dashboard', label: '概览', icon: DataAnalysis },
-  { path: '/datasets', label: '知识库', icon: Collection },
-  { path: '/documents', label: '文档', icon: Document },
-  { path: '/search', label: '检索', icon: Search },
-  { path: '/graph', label: '图谱', icon: Share },
-  { path: '/chat', label: '问答', icon: ChatDotRound },
+  { path: '/documents', label: '我的文档', icon: Files },
+  { path: '/reports/new', label: '生成报告', icon: Tools },
+  { path: '/reports', label: '我的报告', icon: DocumentCopy },
+  { path: '/chat', label: '智能问答', icon: ChatDotRound },
+]
+
+const adminNav = [
+  { path: '/datasets', label: '平台知识库', icon: Collection },
+  { path: '/search', label: '检索测试', icon: Search },
+  { path: '/graph', label: '知识图谱', icon: Share },
 ]
 
 const activePath = computed(() => route.path)
@@ -66,21 +73,38 @@ onMounted(async () => {
         </div>
         <div>
           <div class="brand-title">枫桥智诉</div>
-          <div class="brand-sub">知识库 · 图谱底座</div>
+          <div class="brand-sub">法律智能辅助平台</div>
         </div>
       </div>
 
       <nav class="nav">
-        <router-link
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: activePath.startsWith(item.path) }"
-        >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </router-link>
+        <div class="nav-section">
+          <div class="nav-section-title">用户工作台</div>
+          <router-link
+            v-for="item in userNav"
+            :key="item.path"
+            :to="item.path"
+            class="nav-item"
+            :class="{ active: activePath.startsWith(item.path) }"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">管理员</div>
+          <router-link
+            v-for="item in adminNav"
+            :key="item.path"
+            :to="item.path"
+            class="nav-item"
+            :class="{ active: activePath.startsWith(item.path) }"
+          >
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </router-link>
+        </div>
       </nav>
 
       <div class="sidebar-footer">
@@ -169,7 +193,23 @@ onMounted(async () => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
   gap: 4px;
+}
+
+.nav-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 12px 4px;
 }
 
 .nav-item {
