@@ -16,6 +16,11 @@ export async function createConversation(payload: ConversationCreate): Promise<C
   return res.data
 }
 
+export async function updateConversation(id: string, payload: Partial<ConversationCreate>): Promise<Conversation> {
+  const res = await apiClient.patch<Conversation>(`/conversations/${id}`, payload)
+  return res.data
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   await apiClient.delete(`/conversations/${id}`)
 }

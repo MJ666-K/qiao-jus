@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from core.llm import chat
@@ -37,24 +38,27 @@ class QASkill(Skill):
         tenant_id = params["tenant_id"]
         use_graph = params.get("use_graph", True)
 
-        # 1. 调用 RAG Search Skill
-        rag_result = await self.call_skill("rag_search", {
-            "query": query,
-            "tenant_id": tenant_id,
-            "top_k": params.get("top_k", 8),
-        })
-
-        # 2. 调用 Graph Query Skill（可选）
-        graph_ctx = []
         if use_graph:
-            graph_result = await self.call_skill("graph_query", {
+            rag_task = self.call_skill("rag_search", {
+                "query": query,
+                "tenant_id": tenant_id,
+                "top_k": params.get("top_k", 8),
+            })
+            graph_task = self.call_skill("graph_query", {
                 "query": query,
                 "tenant_id": tenant_id,
                 "depth": 2,
             })
+            rag_result, graph_result = await asyncio.gather(rag_task, graph_task)
             graph_ctx = graph_result.get("entities", [])
+        else:
+            rag_result = await self.call_skill("rag_search", {
+                "query": query,
+                "tenant_id": tenant_id,
+                "top_k": params.get("top_k", 8),
+            })
+            graph_ctx = []
 
-        # 3. 构建上下文并生成答案
         hits = rag_result.get("hits", [])
         context_blocks = [h["text"] for h in hits[:6]]
         if graph_ctx:

@@ -2,6 +2,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+FOREGROUND="${1:-}"
+if [ "$FOREGROUND" = "-f" ] || [ "$FOREGROUND" = "--foreground" ]; then
+  FOREGROUND_MODE=true
+else
+  FOREGROUND_MODE=false
+fi
+
 docker compose -f ../deploy/docker-compose.yml up -d postgres qdrant neo4j redis
 
 echo "==> Waiting for postgres..."
@@ -15,10 +22,18 @@ echo "==> Applying database migrations..."
 pkill -f "uvicorn api.main:app" 2>/dev/null || true
 pkill -f "celery.*pipeline.celery_app" 2>/dev/null || true
 
-nohup .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/ks_api.log 2>&1 &
-nohup .venv/bin/celery -A pipeline.celery_app worker -Q ingest,graph --concurrency=2 --loglevel=INFO > /tmp/ks_worker.log 2>&1 &
+if [ "$FOREGROUND_MODE" = true ]; then
+  echo ""
+  echo "==> Starting API in foreground mode..."
+  echo "==> Press Ctrl+C to stop"
+  echo ""
+  .venv/bin/celery -A pipeline.celery_app worker -Q ingest,graph --concurrency=2 --loglevel=INFO &
+  .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
+else
+  nohup .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/ks_api.log 2>&1 &
+  nohup .venv/bin/celery -A pipeline.celery_app worker -Q ingest,graph --concurrency=2 --loglevel=INFO > /tmp/ks_worker.log 2>&1 &
 
-cat <<EOF
+  cat <<EOF
 
 开发服务已启动:
   API:       http://localhost:8000/docs
@@ -29,3 +44,4 @@ cat <<EOF
   停止:      ./scripts/stop.sh
 
 EOF
+fi

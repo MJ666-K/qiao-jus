@@ -186,6 +186,7 @@ class Conversation(Base):
     )
     title: Mapped[str] = mapped_column(String(500), default="新对话")
     track: Mapped[str | None] = mapped_column(String(30))
+    enable_thinking: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

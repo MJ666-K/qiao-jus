@@ -202,6 +202,7 @@ export interface ConversationSummary {
   report_id?: string | null
   track?: string | null
   message_count: number
+  enable_thinking: boolean
   created_at: string
   updated_at: string
 }
@@ -223,6 +224,7 @@ export interface Conversation {
   report_id?: string | null
   title: string
   track?: string | null
+  enable_thinking: boolean
   created_at: string
   updated_at: string
   messages: ChatMessage[]
@@ -232,6 +234,7 @@ export interface ConversationCreate {
   title?: string
   report_id?: string
   track?: string
+  enable_thinking?: boolean
 }
 
 export type WsClientMessage =
@@ -242,8 +245,9 @@ export type WsClientMessage =
 
 export type WsServerMessage =
   | { type: 'connected'; session_id: string; report_id?: string | null }
+  | { type: 'status'; content: string }
   | { type: 'token'; content: string }
   | { type: 'citation'; chunk_id?: string; document_id?: string; source_type: SourceType; source_title: string; excerpt?: string; page?: number }
-  | { type: 'done'; message_id: string; confidence: number; citations: Citation[]; suggested_questions: string[] }
+  | { type: 'done'; message_id: string; content?: string; confidence: number; citations: Citation[]; suggested_questions: string[] }
   | { type: 'report_bound'; report_id?: string | null }
   | { type: 'error'; message: string }

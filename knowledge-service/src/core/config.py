@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     search_top_k: int = 10
     rrf_k: int = 60
     rerank_top_k: int = 20
+    bm25_k1: float = 1.5
+    bm25_b: float = 0.75
+    dense_top_k_multiplier: int = 3
 
     # ===== Aliyun OSS (required for file uploads) =====
     # Without these, the upload endpoint will fail at first use.

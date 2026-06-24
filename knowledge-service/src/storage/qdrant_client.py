@@ -78,13 +78,11 @@ async def search_dense(
     filters: dict[str, Any],
     top_k: int,
 ) -> list[qm.ScoredPoint]:
-    # Qdrant client >=1.10 deprecated `search()` in favor of `query_points()`.
     client = get_client()
     user_id = filters.pop("_user_scope", None)
     must = [qm.FieldCondition(key=k, match=qm.MatchValue(value=str(v))) for k, v in filters.items()]
     built_filter: qm.Filter | None = None
     if user_id:
-        # (scope=platform) OR (scope=user AND user_id=<user_id>)
         built_filter = qm.Filter(
             must=must,
             should=[
@@ -98,7 +96,6 @@ async def search_dense(
                     ]
                 ),
             ],
-            min_should=1,
         )
     elif must:
         built_filter = qm.Filter(must=must)

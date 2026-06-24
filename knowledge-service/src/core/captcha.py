@@ -8,12 +8,18 @@ _CODE_LENGTH = 4
 _WIDTH = 120
 _HEIGHT = 44
 _ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_PURGE_INTERVAL = 10
 
 _store: dict[str, tuple[str, float]] = {}
+_last_purge: float = 0.0
 
 
 def _purge() -> None:
+    global _last_purge
     now = time.time()
+    if now - _last_purge < _PURGE_INTERVAL:
+        return
+    _last_purge = now
     for k in [k for k, (_, exp) in _store.items() if exp < now]:
         _store.pop(k, None)
 

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { fetchMe, login as apiLogin, register as apiRegister } from '@/api/auth'
-import { clearToken, setToken } from '@/api/client'
+import { clearTokenData, getTokenData, setTokenData } from '@/api/client'
 import type { User } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -13,7 +13,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       const token = await apiLogin(email, password, captchaKey, captchaCode)
-      setToken(token.access_token)
+      setTokenData(token)
       user.value = await fetchMe()
     } finally {
       loading.value = false
@@ -30,7 +30,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       const token = await apiRegister(email, password, tenantName, captchaKey, captchaCode)
-      setToken(token.access_token)
+      setTokenData(token)
       user.value = await fetchMe()
     } finally {
       loading.value = false
@@ -39,8 +39,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function restore() {
     if (ready.value) return
-    const token = localStorage.getItem('ks_token')
-    if (!token) {
+    const tokenData = getTokenData()
+    if (!tokenData?.access_token) {
       ready.value = true
       return
     }
@@ -50,7 +50,7 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('invalid user profile')
       }
     } catch {
-      clearToken()
+      clearTokenData()
       user.value = null
     } finally {
       ready.value = true
@@ -59,13 +59,14 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function ensureUser() {
     if (user.value) return user.value
-    if (!localStorage.getItem('ks_token')) return null
+    const tokenData = getTokenData()
+    if (!tokenData?.access_token) return null
     await restore()
     return user.value
   }
 
   function logout() {
-    clearToken()
+    clearTokenData()
     user.value = null
   }
 

@@ -165,43 +165,43 @@ def _persist_report_chunks(
         session.add(doc)
         session.flush()
 
-        units = build_parent_child(text_body, REPORT, dict(doc.metadata_ or {}))
-        parent_rows = [u for u in units if u.is_parent]
-        child_units = [u for u in units if not u.is_parent]
+        parents, parent_child_texts = build_parent_child(text_body)
+        base_meta = dict(doc.metadata_ or {})
 
         rows = []
-        for i, u in enumerate(parent_rows):
+        for i, ptext in enumerate(parents):
             c = Chunk(
                 document_id=doc.id,
                 parent_id=None,
                 chunk_index=i,
-                text=u.text,
-                token_count=len(u.text),
-                char_count=len(u.text),
+                text=ptext,
+                token_count=len(ptext),
+                char_count=len(ptext),
                 scope="user",
-                metadata_=u.metadata,
+                metadata_=base_meta,
             )
             session.add(c)
             rows.append(c)
         session.flush()
-        parent_map = {p.chunk_index: p for p in rows}
+
         children = []
-        global_idx = 0
-        for u in child_units:
-            parent_row = parent_map.get(u.parent_index)
-            c = Chunk(
-                document_id=doc.id,
-                parent_id=parent_row.id if parent_row else None,
-                chunk_index=global_idx,
-                text=u.text,
-                token_count=len(u.text),
-                char_count=len(u.text),
-                scope="user",
-                metadata_=u.metadata,
-            )
-            session.add(c)
-            children.append(c)
-            global_idx += 1
+        global_idx = len(rows)
+        for pi, childs in enumerate(parent_child_texts):
+            parent = rows[pi] if pi < len(rows) else None
+            for ctext in childs:
+                c = Chunk(
+                    document_id=doc.id,
+                    parent_id=parent.id if parent else None,
+                    chunk_index=global_idx,
+                    text=ctext,
+                    token_count=len(ctext),
+                    char_count=len(ctext),
+                    scope="user",
+                    metadata_=base_meta,
+                )
+                session.add(c)
+                children.append(c)
+                global_idx += 1
         if not children:
             children = rows
         session.flush()

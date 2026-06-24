@@ -285,14 +285,7 @@ function resetZoom() {
 defineExpose({ zoomIn: () => zoomBy(1.3), zoomOut: () => zoomBy(0.75), resetZoom })
 
 watch(
-  () =>
-    [
-      props.graphEntities,
-      props.graphRelations,
-      props.linkMode,
-      props.selectedEntityId,
-      props.selectedRelationKey,
-    ] as const,
+  () => [props.graphEntities, props.graphRelations, props.linkMode] as const,
   () => render(),
   { deep: true },
 )

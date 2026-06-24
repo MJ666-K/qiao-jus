@@ -10,6 +10,7 @@ class ConversationCreate(BaseModel):
     title: str = Field(default="新对话", max_length=500)
     report_id: UUID | None = None
     track: str | None = Field(default=None, max_length=30)
+    enable_thinking: bool = Field(default=True)
 
 
 class MessageOut(BaseModel):
@@ -29,6 +30,7 @@ class ConversationOut(BaseModel):
     report_id: UUID | None = None
     title: str
     track: str | None = None
+    enable_thinking: bool = True
     created_at: datetime
     updated_at: datetime
     messages: list[MessageOut] = []
@@ -40,5 +42,6 @@ class ConversationSummary(BaseModel):
     report_id: UUID | None = None
     track: str | None = None
     message_count: int = 0
+    enable_thinking: bool = True
     created_at: datetime
     updated_at: datetime

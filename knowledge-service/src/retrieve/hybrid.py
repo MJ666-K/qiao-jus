@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -17,6 +18,9 @@ from storage.postgres import SessionLocal
 from storage.qdrant_client import search_dense
 
 logger = logging.getLogger(__name__)
+
+_retrieve_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_RETRIEVE_TTL = 60
 
 
 async def retrieve_children(
@@ -35,7 +39,16 @@ async def retrieve_children(
     When ``user_id`` is given, restricts to that user's private docs (scope=user
     AND user_id matches) PLUS all platform docs (scope=platform). When ``scope``
     is given explicitly ('platform' or 'user'), filters to that scope only.
+    
+    Results are cached for 60 seconds based on query+tenant_id+filters.
     """
+    cache_key = f"{tenant_id}:{query}:{dataset_id}:{doc_type}:{top_k}:{user_id}:{scope}"
+    now = time.time()
+    cached = _retrieve_cache.get(cache_key)
+    if cached and now - cached[0] < _RETRIEVE_TTL:
+        logger.debug("retrieve_children cache hit for query=%s", query[:50])
+        return cached[1]
+
     top_k = top_k or settings.search_top_k
     dense_filters: dict[str, Any] = {"tenant_id": tenant_id}
     if dataset_id:
@@ -47,11 +60,11 @@ async def retrieve_children(
     elif user_id:
         dense_filters["_user_scope"] = user_id
 
-    query_vec_list = await asyncio.to_thread(embed_texts, [query])
-    query_vec = query_vec_list[0]
+    query_vec = await _embed_query(query)
 
-    dense_task = search_dense(query_vec, dense_filters, top_k * 3)
-    bm25_task = _bm25_search(query, tenant_id, dataset_id, doc_type, top_k * 3)
+    extend = top_k * settings.dense_top_k_multiplier
+    dense_task = search_dense(query_vec, dense_filters, extend)
+    bm25_task = _bm25_search(query, tenant_id, dataset_id, doc_type, extend)
     dense_hits, bm25_hits = await asyncio.gather(dense_task, bm25_task)
 
     fused = rrf_fusion(
@@ -109,6 +122,9 @@ async def retrieve_children(
         })
         if len(out) >= top_k:
             break
+    
+    _retrieve_cache[cache_key] = (now, out)
+    logger.debug("retrieve_children cached result for query=%s", query[:50])
     return out
 
 
@@ -146,16 +162,48 @@ async def _fetch_chunks_with_parents(child_ids: list[uuid.UUID]) -> list[dict[st
         return rows
 
 
+_bm25_cache: dict[tuple[str, str | None, str | None], tuple[float, list[dict[str, Any]], BM25Index]] = {}
+_BM25_TTL = 300
+
+
+async def _get_bm25(tenant_id: str, dataset_id: str | None, doc_type: str | None):
+    key = (tenant_id, dataset_id, doc_type)
+    now = time.time()
+    cached = _bm25_cache.get(key)
+    if cached and now - cached[0] < _BM25_TTL:
+        return cached[1], cached[2]
+    corpus = await _load_corpus(tenant_id, dataset_id, doc_type)
+    if not corpus:
+        return None
+    bm25 = BM25Index(corpus=[c["text"] for c in corpus], k1=settings.bm25_k1, b=settings.bm25_b)
+    _bm25_cache[key] = (now, corpus, bm25)
+    return corpus, bm25
+
+
 async def _bm25_search(
     query: str, tenant_id: str, dataset_id: str | None, doc_type: str | None, top_k: int
 ) -> list[dict[str, Any]]:
-    corpus = await _load_corpus(tenant_id, dataset_id, doc_type)
-    if not corpus:
+    got = await _get_bm25(tenant_id, dataset_id, doc_type)
+    if not got:
         return []
-    bm25 = BM25Index(corpus=[c["text"] for c in corpus])
+    corpus, bm25 = got
     scores = bm25.get_scores(query)
     ranked = sorted(zip(corpus, scores, strict=True), key=lambda x: x[1], reverse=True)[:top_k]
     return [{"id": str(c["id"]), "score": float(s)} for c, s in ranked if s > 0]
+
+
+_embed_cache: dict[str, tuple[float, list[float]]] = {}
+_EMBED_TTL = 600
+
+
+async def _embed_query(query: str) -> list[float]:
+    now = time.time()
+    cached = _embed_cache.get(query)
+    if cached and now - cached[0] < _EMBED_TTL:
+        return cached[1]
+    vec = (await asyncio.to_thread(embed_texts, [query]))[0]
+    _embed_cache[query] = (now, vec)
+    return vec
 
 
 async def _load_corpus(tenant_id: str, dataset_id: str | None, doc_type: str | None = None) -> list[dict[str, Any]]:

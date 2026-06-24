@@ -18,9 +18,9 @@ def tokenize(text: str) -> list[str]:
 
 
 class BM25Index:
-    def __init__(self, corpus: Iterable[str]):
+    def __init__(self, corpus: Iterable[str], k1: float = 1.5, b: float = 0.75):
         self.docs: list[list[str]] = [tokenize(d) for d in corpus]
-        self.bm25 = BM25Okapi(self.docs) if self.docs else None
+        self.bm25 = BM25Okapi(self.docs, k1=k1, b=b) if self.docs else None
 
     def get_scores(self, query: str) -> list[float]:
         if not self.bm25:

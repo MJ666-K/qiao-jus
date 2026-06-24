@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { WsChatClient } from '@/api/ws'
-import { createConversation, getConversation } from '@/api/conversations'
+import { createConversation, getConversation, updateConversation } from '@/api/conversations'
 import type {
   ChatMessage,
   Citation,
@@ -14,34 +14,49 @@ export const useConversationStore = defineStore('conversation', () => {
   const currentConversation = ref<Conversation | null>(null)
   const messages = ref<ChatMessage[]>([])
   const streamingMessage = ref<string>('')
+  const statusMessage = ref<string>('')
   const isStreaming = ref(false)
   const isConnected = ref(false)
   const boundReportId = ref<string | null>(null)
   const error = ref<string | null>(null)
   const pendingCitations = ref<Citation[]>([])
+  const enableThinking = ref(true)
 
   let client: WsChatClient | null = null
 
   async function initConversation(opts: { conversationId?: string; reportId?: string } = {}) {
     error.value = null
-    if (client) {
-      client.close()
-      client = null
-    }
 
     if (opts.conversationId) {
       const conv = await getConversation(opts.conversationId)
       currentConversation.value = conv
       messages.value = conv.messages
       boundReportId.value = conv.report_id || null
+      enableThinking.value = conv.enable_thinking ?? true
     } else {
       const conv = await createConversation({
         title: '新对话',
         report_id: opts.reportId,
+        enable_thinking: enableThinking.value,
       })
       currentConversation.value = conv
       messages.value = []
       boundReportId.value = conv.report_id || null
+      enableThinking.value = conv.enable_thinking ?? true
+    }
+
+    if (client && isConnected.value) {
+      client.send({
+        type: 'init',
+        conversation_id: currentConversation.value?.id,
+        report_id: boundReportId.value || undefined,
+      })
+      return
+    }
+
+    if (client) {
+      client.close()
+      client = null
     }
 
     client = new WsChatClient()
@@ -68,7 +83,11 @@ export const useConversationStore = defineStore('conversation', () => {
           boundReportId.value = msg.report_id
         }
         break
+      case 'status':
+        statusMessage.value = msg.content
+        break
       case 'token':
+        statusMessage.value = ''
         streamingMessage.value += msg.content
         break
       case 'citation':
@@ -85,13 +104,14 @@ export const useConversationStore = defineStore('conversation', () => {
         messages.value.push({
           id: msg.message_id,
           role: 'assistant',
-          content: streamingMessage.value,
+          content: msg.content || streamingMessage.value,
           confidence: msg.confidence,
           suggested_questions: msg.suggested_questions || [],
           citations: msg.citations && msg.citations.length ? msg.citations : [...pendingCitations.value],
           created_at: new Date().toISOString(),
         })
         streamingMessage.value = ''
+        statusMessage.value = ''
         pendingCitations.value = []
         isStreaming.value = false
         break
@@ -102,6 +122,7 @@ export const useConversationStore = defineStore('conversation', () => {
         error.value = msg.message
         isStreaming.value = false
         streamingMessage.value = ''
+        statusMessage.value = ''
         pendingCitations.value = []
         ElMessage.error(msg.message)
         break
@@ -119,6 +140,8 @@ export const useConversationStore = defineStore('conversation', () => {
       return
     }
 
+    const isFirstMessage = messages.value.length === 0
+
     messages.value.push({
       id: `temp-${Date.now()}`,
       role: 'user',
@@ -131,6 +154,16 @@ export const useConversationStore = defineStore('conversation', () => {
     pendingCitations.value = []
     isStreaming.value = true
     error.value = null
+
+    if (isFirstMessage && currentConversation.value) {
+      const title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
+      try {
+        const updated = await updateConversation(currentConversation.value.id, { title })
+        currentConversation.value = updated
+      } catch (e) {
+        console.error('Failed to update conversation title:', e)
+      }
+    }
 
     try {
       client!.send({ type: 'message', content })
@@ -164,18 +197,90 @@ export const useConversationStore = defineStore('conversation', () => {
     isStreaming.value = false
   }
 
+  async function toggleThinking(enabled: boolean) {
+    enableThinking.value = enabled
+    if (currentConversation.value) {
+      try {
+        const updated = await updateConversation(currentConversation.value.id, {
+          enable_thinking: enabled,
+        })
+        currentConversation.value = updated
+      } catch (e) {
+        console.error('Failed to update conversation thinking setting:', e)
+        ElMessage.error('更新设置失败')
+      }
+    }
+  }
+
+  async function createConversationAndSet(opts: { reportId?: string } = {}) {
+    const conv = await createConversation({
+      title: '新对话',
+      report_id: opts.reportId,
+      enable_thinking: enableThinking.value,
+    })
+    currentConversation.value = conv
+    messages.value = []
+    boundReportId.value = conv.report_id || null
+    enableThinking.value = conv.enable_thinking ?? true
+
+    if (client && isConnected.value) {
+      client.send({
+        type: 'init',
+        conversation_id: currentConversation.value?.id,
+        report_id: boundReportId.value || undefined,
+      })
+      return conv
+    }
+
+    if (client) {
+      client.close()
+      client = null
+    }
+
+    client = new WsChatClient()
+    client.onMessage(handleServerMessage)
+    client.onClose(() => {
+      isConnected.value = false
+    })
+    await client.connect()
+    isConnected.value = true
+    client.send({
+      type: 'init',
+      conversation_id: currentConversation.value?.id,
+      report_id: boundReportId.value || undefined,
+    })
+    return conv
+  }
+
+  function clearMessages() {
+    messages.value = []
+    streamingMessage.value = ''
+    statusMessage.value = ''
+    pendingCitations.value = []
+  }
+
+  function clearCurrentConversation() {
+    currentConversation.value = null
+  }
+
   return {
     currentConversation,
     messages,
     streamingMessage,
+    statusMessage,
     isStreaming,
     isConnected,
     boundReportId,
+    enableThinking,
     error,
     initConversation,
+    createConversationAndSet,
     sendMessage,
     stopGeneration,
     bindReport,
+    toggleThinking,
     disconnect,
+    clearMessages,
+    clearCurrentConversation,
   }
 })

@@ -152,6 +152,16 @@ onMounted(() => {
             <el-form-item label="Rerank Top-K">
               <el-input-number v-model="chunkingConfig.rerank_top_k" :min="5" :max="100" />
             </el-form-item>
+            <el-divider>BM25 与混合检索</el-divider>
+            <el-form-item label="BM25 k1（词频饱和度）">
+              <el-input-number v-model="chunkingConfig.bm25_k1" :min="0" :max="3" :step="0.1" />
+            </el-form-item>
+            <el-form-item label="BM25 b（文档长度归一）">
+              <el-input-number v-model="chunkingConfig.bm25_b" :min="0" :max="1" :step="0.05" />
+            </el-form-item>
+            <el-form-item label="Dense/BM25 召回扩展倍数">
+              <el-input-number v-model="chunkingConfig.dense_top_k_multiplier" :min="1" :max="10" />
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" :loading="savingChunking" @click="saveChunkingConfig">保存配置</el-button>
               <span class="hint">仅对后续新上传文档生效；存量文档需重新索引</span>

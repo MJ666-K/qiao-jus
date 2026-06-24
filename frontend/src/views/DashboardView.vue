@@ -4,9 +4,12 @@ import { useRouter } from 'vue-router'
 import { fetchStats } from '@/api/stats'
 import { listDocuments } from '@/api/documents'
 import { listReports } from '@/api/reports'
+import { useAuthStore } from '@/stores/auth'
 import type { DocumentItem, Report, Stats } from '@/types'
 
 const router = useRouter()
+const auth = useAuthStore()
+const isAdmin = computed(() => auth.user?.role === 'admin')
 const loading = ref(true)
 const stats = ref<Stats | null>(null)
 const myDocuments = ref<DocumentItem[]>([])
@@ -156,9 +159,9 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="section">
+    <div v-if="isAdmin" class="section">
       <div class="section-header">
-        <h3 class="section-title">平台知识库（管理员视角）</h3>
+        <h3 class="section-title">平台知识库</h3>
       </div>
       <div class="stat-grid">
         <div v-for="card in platformCards" :key="card.key" class="stat-card card-panel small">

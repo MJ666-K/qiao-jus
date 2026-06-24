@@ -1,4 +1,5 @@
 from uuid import UUID
+import asyncio
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.get("/captcha", response_model=CaptchaResponse)
 async def captcha():
-    key, image = create_captcha()
+    key, image = await asyncio.to_thread(create_captcha)
     return CaptchaResponse(captcha_key=key, image=image)
 
 

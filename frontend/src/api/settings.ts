@@ -7,6 +7,9 @@ export interface ChunkingConfig {
   search_top_k: number
   rrf_k: number
   rerank_top_k: number
+  bm25_k1: number
+  bm25_b: number
+  dense_top_k_multiplier: number
 }
 
 export async function getChunkingConfig(): Promise<ChunkingConfig> {

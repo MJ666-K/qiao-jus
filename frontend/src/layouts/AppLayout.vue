@@ -318,7 +318,10 @@ onMounted(async () => {
 
 .content {
   flex: 1;
-  padding: 24px 28px;
+  height: calc(100vh - 73px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 :deep(.el-dropdown-menu__item) {

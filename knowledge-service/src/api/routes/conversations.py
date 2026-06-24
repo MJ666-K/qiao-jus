@@ -30,6 +30,7 @@ async def create_conversation(payload: ConversationCreate, user: CurrentUserDep,
         report_id=report_id,
         title=payload.title,
         track=payload.track,
+        enable_thinking=payload.enable_thinking,
     )
     session.add(conv)
     await session.commit()
@@ -59,6 +60,7 @@ async def list_conversations(user: CurrentUserDep, session: SessionDep, limit: i
             report_id=conv.report_id,
             track=conv.track,
             message_count=msg_count or 0,
+            enable_thinking=conv.enable_thinking,
             created_at=conv.created_at,
             updated_at=conv.updated_at,
         ))
@@ -70,6 +72,39 @@ async def get_conversation(conversation_id: str, user: CurrentUserDep, session: 
     conv = await session.get(Conversation, uuid.UUID(conversation_id))
     if not conv or str(conv.tenant_id) != user.tenant_id:
         raise HTTPException(404, "conversation not found")
+    res = await session.execute(
+        select(Message)
+        .where(Message.conversation_id == conv.id)
+        .order_by(Message.created_at)
+    )
+    messages = res.scalars().all()
+    return _to_out(conv, messages)
+
+
+@router.patch("/{conversation_id}", response_model=ConversationOut)
+async def update_conversation(
+    conversation_id: str,
+    payload: ConversationCreate,
+    user: CurrentUserDep,
+    session: SessionDep,
+):
+    conv = await session.get(Conversation, uuid.UUID(conversation_id))
+    if not conv or str(conv.tenant_id) != user.tenant_id:
+        raise HTTPException(404, "conversation not found")
+    if payload.title:
+        conv.title = payload.title
+    if payload.track:
+        conv.track = payload.track
+    # enable_thinking can be explicitly set to False, so check for None
+    if payload.enable_thinking is not None:
+        conv.enable_thinking = payload.enable_thinking
+    if payload.report_id:
+        r = await session.get(Report, payload.report_id)
+        if not r or str(r.tenant_id) != user.tenant_id:
+            raise HTTPException(404, "report not found")
+        conv.report_id = r.id
+    await session.commit()
+    await session.refresh(conv)
     res = await session.execute(
         select(Message)
         .where(Message.conversation_id == conv.id)
@@ -96,6 +131,7 @@ def _to_out(conv: Conversation, messages: list[Message]) -> ConversationOut:
         report_id=conv.report_id,
         title=conv.title,
         track=conv.track,
+        enable_thinking=conv.enable_thinking,
         created_at=conv.created_at,
         updated_at=conv.updated_at,
         messages=[_msg_out(m) for m in messages],

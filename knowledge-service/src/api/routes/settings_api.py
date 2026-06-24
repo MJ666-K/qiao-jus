@@ -14,6 +14,9 @@ class ChunkingConfig(BaseModel):
     search_top_k: int
     rrf_k: int
     rerank_top_k: int
+    bm25_k1: float
+    bm25_b: float
+    dense_top_k_multiplier: int
 
 
 @router.get("/chunking", response_model=ChunkingConfig)
@@ -25,6 +28,9 @@ async def get_chunking_config(user: CurrentUserDep):
         search_top_k=settings.search_top_k,
         rrf_k=settings.rrf_k,
         rerank_top_k=settings.rerank_top_k,
+        bm25_k1=settings.bm25_k1,
+        bm25_b=settings.bm25_b,
+        dense_top_k_multiplier=settings.dense_top_k_multiplier,
     )
 
 
@@ -39,4 +45,7 @@ async def update_chunking_config(payload: ChunkingConfig, user: CurrentUserDep):
     settings.search_top_k = payload.search_top_k
     settings.rrf_k = payload.rrf_k
     settings.rerank_top_k = payload.rerank_top_k
+    settings.bm25_k1 = payload.bm25_k1
+    settings.bm25_b = payload.bm25_b
+    settings.dense_top_k_multiplier = payload.dense_top_k_multiplier
     return payload

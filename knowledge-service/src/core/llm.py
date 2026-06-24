@@ -1,6 +1,6 @@
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 import litellm
@@ -66,22 +66,23 @@ def chat_json(messages: list[dict[str, str]], *, temperature: float = 0.1) -> An
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def stream_chat(
+async def stream_chat(
     messages: list[dict[str, str]],
     *,
     temperature: float = 0.4,
     max_tokens: int | None = None,
-) -> Iterator[str]:
+) -> AsyncIterator[str]:
     kwargs: dict[str, Any] = {
         "model": f"openai/{settings.llm_model_id}",
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens or settings.llm_max_tokens,
         "stream": True,
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
         **_common_kwargs(),
     }
-    resp = litellm.completion(**kwargs)
-    for chunk in resp:
+    resp = await litellm.acompletion(**kwargs)
+    async for chunk in resp:
         delta = chunk.choices[0].delta.content
         if delta:
             yield delta
