@@ -174,7 +174,7 @@ async function submit() {
   flex-direction: column;
   justify-content: space-between;
   padding: 48px 56px;
-  background: #f5f0e8;
+  background: var(--brand-bg);
 }
 
 .hero-glow {
@@ -261,7 +261,7 @@ async function submit() {
 .brand-name {
   font-size: 20px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .hero-tagline {
@@ -274,7 +274,7 @@ async function submit() {
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.5px;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 
 .hero-tagline p {
@@ -346,7 +346,7 @@ async function submit() {
   margin: 0 0 20px;
   font-size: 24px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--text-primary);
   letter-spacing: -0.3px;
 }
 

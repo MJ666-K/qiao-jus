@@ -194,11 +194,11 @@ async function rebuild() {
       class="mb"
     />
 
-    <div class="toolbar card-panel">
+    <div class="toolbar-row card-panel">
       <el-input
         v-model="query"
         placeholder="输入问题或实体名"
-        class="flex-1"
+        class="grow"
         clearable
         @keyup.enter="loadLocal"
       />
@@ -351,19 +351,17 @@ async function rebuild() {
 .mb { margin-bottom: 12px; }
 .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .ex-tag { cursor: pointer; }
-.toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-.flex-1 { flex: 1; min-width: 200px; }
 .graph-layout { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.graph-main { position: relative; min-height: 520px; }
+.graph-main { position: relative; min-height: 560px; }
 .canvas-toolbar {
   display: flex; gap: 8px; flex-wrap: wrap;
-  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-default);
 }
 .graph-loading {
   position: absolute; inset: 48px 0 0; z-index: 2;
   display: grid; place-items: center; background: rgb(255 255 255 / 70%);
 }
-.graph-loading .spin { font-size: 28px; color: #f97316; animation: spin 1s linear infinite; }
+.graph-loading .spin { font-size: 28px; color: var(--brand-primary); animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .graph-side-wrap { display: flex; flex-direction: column; gap: 12px; }
 .graph-side { overflow: visible; }
@@ -392,7 +390,7 @@ async function rebuild() {
 .rel-type { margin-left: auto; font-size: 11px; color: #94a3b8; background: #fff; padding: 2px 8px; border-radius: 10px; border: 1px solid #e2e8f0; }
 .full-btn { width: 100%; margin-top: 20px; }
 .drawer-content { padding: 4px 0; }
-.info-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.info-card { background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark)); color: #fff; border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px; }
 .info-card .info-label { font-size: 11px; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
 .info-card .info-value { font-size: 16px; font-weight: 600; margin-top: 4px; word-break: break-all; }
 .info-item { background: #f8fafc; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }

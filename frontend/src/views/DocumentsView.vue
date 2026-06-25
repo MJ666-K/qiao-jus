@@ -160,7 +160,7 @@ onUnmounted(() => {
       <el-tab-pane label="公共法规库（只读）" name="platform" />
     </el-tabs>
 
-    <div class="toolbar">
+    <div class="toolbar-row">
       <el-select
         v-model="datasetFilter"
         placeholder="筛选知识库"
@@ -275,21 +275,13 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-  gap: 12px;
-}
-
 .upload-area {
   margin-bottom: 16px;
 }
 
 .upload-icon {
   font-size: 48px;
-  color: #f97316;
+  color: var(--brand-primary);
 }
 
 .mt {

@@ -394,15 +394,16 @@ onUnmounted(() => {
   display: flex;
   height: 100%;
   margin: 0;
-  background: #f8fafc;
+  background: var(--brand-bg);
   overflow: hidden;
+  border-radius: 0;
 }
 
 .conv-sidebar {
-  width: 260px;
+  width: 248px;
   flex-shrink: 0;
-  border-right: 1px solid #e2e8f0;
-  background: #fff;
+  border-right: 1px solid var(--border-default);
+  background: var(--brand-surface);
   display: flex;
   flex-direction: column;
   padding: 16px;
@@ -462,7 +463,7 @@ onUnmounted(() => {
 }
 
 .conv-item:hover {
-  background: #f8fafc;
+  background: var(--brand-bg);
 }
 
 .conv-item.active {
@@ -524,7 +525,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: #fff;
+  background: var(--brand-surface);
   overflow: hidden;
 }
 
@@ -533,8 +534,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #fff;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--brand-surface);
   flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
@@ -579,7 +580,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #f8fafc;
+  background: var(--brand-bg);
   min-height: 0;
 }
 
@@ -630,7 +631,7 @@ onUnmounted(() => {
 }
 
 .msg-row.assistant .bubble {
-  background: #fff;
+  background: var(--brand-surface);
   border: 1px solid #e2e8f0;
   padding: 8px 12px;
 }
@@ -654,7 +655,7 @@ onUnmounted(() => {
 }
 
 .citations .el-collapse-item__header {
-  background: #f8fafc;
+  background: var(--brand-bg);
   border-radius: 6px;
   padding: 6px 10px;
   font-size: 12px;
@@ -733,8 +734,8 @@ onUnmounted(() => {
   gap: 10px;
   align-items: flex-end;
   padding: 10px 16px;
-  border-top: 1px solid #e2e8f0;
-  background: #fff;
+  border-top: 1px solid var(--border-default);
+  background: var(--brand-surface);
   flex-shrink: 0;
 }
 
@@ -890,11 +891,11 @@ onUnmounted(() => {
 }
 
 .markdown-content td {
-  background: #fff;
+  background: var(--brand-surface);
 }
 
 .markdown-content tr:nth-child(even) td {
-  background: #f8fafc;
+  background: var(--brand-bg);
 }
 
 .markdown-content tr:hover td {
