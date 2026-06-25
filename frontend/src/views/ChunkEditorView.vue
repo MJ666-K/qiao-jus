@@ -222,8 +222,6 @@ onMounted(loadData)
   word-break: break-word;
   margin: 0;
   line-height: 1.6;
-  max-height: 200px;
-  overflow-y: auto;
 }
 
 .chunk-edit {

@@ -366,7 +366,7 @@ async function rebuild() {
 .graph-loading .spin { font-size: 28px; color: #f97316; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .graph-side-wrap { display: flex; flex-direction: column; gap: 12px; }
-.graph-side { max-height: 260px; overflow-y: auto; }
+.graph-side { overflow: visible; }
 .graph-side h4 { margin: 0 0 10px; font-size: 15px; }
 .name-list { display: flex; flex-direction: column; gap: 2px; }
 .name-item {

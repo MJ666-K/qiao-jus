@@ -146,7 +146,7 @@ onMounted(async () => {
       <header class="topbar">
         <h1>{{ (route.meta.title as string) || '枫桥智诉' }}</h1>
       </header>
-      <section class="content">
+      <section class="content" :class="{ 'content--fill': route.meta.fillHeight }">
         <router-view />
       </section>
     </main>
@@ -318,10 +318,25 @@ onMounted(async () => {
 
 .content {
   flex: 1;
-  height: calc(100vh - 73px);
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 24px 28px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content--fill {
+  padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.content--fill > :deep(*) {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 :deep(.el-dropdown-menu__item) {

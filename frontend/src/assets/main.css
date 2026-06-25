@@ -59,6 +59,20 @@ body,
   font-size: 14px;
 }
 
+.page-view {
+  width: 100%;
+  min-height: min-content;
+}
+
+/* 表格、长文本在窄屏下可横向滚动 */
+.card-panel :deep(.el-table) {
+  width: 100%;
+}
+
+.card-panel :deep(.el-table__body-wrapper) {
+  overflow-x: auto;
+}
+
 .card-panel {
   background: #fff;
   border-radius: 12px;

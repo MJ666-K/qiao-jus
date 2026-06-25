@@ -581,7 +581,6 @@ onUnmounted(() => {
   gap: 10px;
   background: #f8fafc;
   min-height: 0;
-  max-height: calc(100vh - 200px);
 }
 
 .msg-row {

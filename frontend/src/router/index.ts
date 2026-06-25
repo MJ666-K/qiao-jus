@@ -56,13 +56,13 @@ const router = createRouter({
           path: 'chat',
           name: 'chat',
           component: () => import('@/views/ChatView.vue'),
-          meta: { title: '智能问答' },
+          meta: { title: '智能问答', fillHeight: true },
         },
         {
           path: 'chat/:conversationId?',
           name: 'chat-with-conversation',
           component: () => import('@/views/ChatView.vue'),
-          meta: { title: '智能问答' },
+          meta: { title: '智能问答', fillHeight: true },
         },
         {
           path: 'reports',
