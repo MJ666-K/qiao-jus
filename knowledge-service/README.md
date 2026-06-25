@@ -139,7 +139,7 @@ mypy src/core src/api
 
 | 方向 | 怎么做 |
 |------|------|
-| 启用 Reranker | 在 `src/retrieve/reranker.py` 接入 bge-reranker-v2-m3 |
+| 启用 Reranker | 默认 DashScope `qwen3-rerank`（`src/retrieve/reranker.py`） |
 | 全局图谱问答 | 实现 GraphRAG 社区检测 + 层次摘要（level 0..N） |
 | 权限细粒度 | 在 Qdrant payload 加 `acl_read`，Qdrant 过滤 |
 | 文档版本控制 | 给 `documents` 加 `version` 字段，重新上传走 reindex |

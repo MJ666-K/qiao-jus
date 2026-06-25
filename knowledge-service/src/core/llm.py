@@ -66,6 +66,59 @@ def chat_json(messages: list[dict[str, str]], *, temperature: float = 0.1) -> An
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+async def rerank_documents(
+    query: str,
+    documents: list[str],
+    *,
+    top_n: int | None = None,
+    instruct: str | None = None,
+) -> list[tuple[int, float]]:
+    """DashScope compatible rerank API. Returns (document_index, relevance_score) in rank order."""
+    import httpx
+
+    if not documents:
+        return []
+
+    payload: dict[str, Any] = {
+        "model": settings.rerank_model_id,
+        "query": query,
+        "documents": documents,
+        "top_n": top_n or len(documents),
+    }
+    inst = instruct if instruct is not None else settings.rerank_instruct
+    if inst:
+        payload["instruct"] = inst
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            settings.rerank_api_url,
+            headers={
+                "Authorization": f"Bearer {settings.llm_api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    results = data.get("results")
+    if results is None and isinstance(data.get("output"), dict):
+        results = data["output"].get("results")
+    if not isinstance(results, list):
+        raise ValueError(f"unexpected rerank response: {data!r}")
+
+    ranked: list[tuple[int, float]] = []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        try:
+            ranked.append((int(item["index"]), float(item["relevance_score"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return ranked
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 async def stream_chat(
     messages: list[dict[str, str]],
     *,

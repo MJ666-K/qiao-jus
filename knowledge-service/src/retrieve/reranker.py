@@ -3,15 +3,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from core.llm import chat_json
+from core.llm import rerank_documents
 
 logger = logging.getLogger(__name__)
 
+# Per-document char cap sent to rerank API (avoid oversized payloads).
+_MAX_DOC_CHARS = 8000
+
 
 class Reranker:
-    """LLM-based cross-encoder reranker. Uses the same LLM provider as the rest
-    of the stack (DashScope/ZhipuAI/etc) — no model download needed. Falls back
-    to original order if the LLM call fails."""
+    """DashScope qwen3-rerank via compatible-api/v1/reranks."""
 
     async def rank(
         self,
@@ -22,58 +23,44 @@ class Reranker:
         if not candidates:
             return []
         if len(candidates) == 1:
-            return candidates[: (top_k or len(candidates))]
+            return [dict(candidates[0], _rerank_score=candidates[0].get("score", 1.0))]
 
-        scored = await self._score_batch(query, candidates)
-        scored.sort(key=lambda x: x.get("_rerank_score", 0.5), reverse=True)
-        return scored[: (top_k or len(candidates))]
-
-    async def _score_batch(
-        self, query: str, candidates: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+        limit = top_k or len(candidates)
         try:
-            return await self._llm_score(query, candidates)
+            return await self._api_rank(query, candidates, limit)
         except Exception as e:
-            logger.warning("LLM reranker failed, keeping original order: %s", e)
-            return [dict(c, _rerank_score=0.5) for c in candidates]
+            logger.warning("Rerank API failed, keeping RRF order: %s", e)
+            return candidates[:limit]
 
-    async def _llm_score(
-        self, query: str, candidates: list[dict[str, Any]]
+    async def _api_rank(
+        self,
+        query: str,
+        candidates: list[dict[str, Any]],
+        top_k: int,
     ) -> list[dict[str, Any]]:
-        # Pack candidates into one LLM call. Returns scores[id] in [0,1].
-        items = [
-            {"id": str(i), "text": (c.get("text") or "")[:300]}
-            for i, c in enumerate(candidates)
-        ]
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "你是相关性打分器。为每个候选打 0-1 分（1=完全相关，0=无关）。"
-                    "输出严格 JSON。"
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"问题：{query}\n\n候选：\n{items}\n\n"
-                    '输出：{"scores":[{"id":"0","score":0.92}]}'
-                ),
-            },
-        ]
-        data = await _call_chat_json_async(messages)
-        score_map: dict[str, float] = {}
-        for s in data.get("scores", []):
-            try:
-                score_map[str(s["id"])] = float(s["score"])
-            except (KeyError, ValueError, TypeError):
-                continue
+        documents = [(c.get("text") or "")[:_MAX_DOC_CHARS] for c in candidates]
+        ranked = await rerank_documents(query, documents, top_n=top_k)
 
-        return [dict(c, _rerank_score=score_map.get(str(i), 0.5)) for i, c in enumerate(candidates)]
+        out: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        for idx, score in ranked:
+            if idx in seen or idx < 0 or idx >= len(candidates):
+                continue
+            seen.add(idx)
+            out.append(dict(candidates[idx], _rerank_score=score))
+
+        if len(out) < top_k:
+            for i, c in enumerate(candidates):
+                if i in seen:
+                    continue
+                out.append(dict(c, _rerank_score=c.get("score", 0.0)))
+                if len(out) >= top_k:
+                    break
+        return out[:top_k]
 
 
 class PassThroughReranker(Reranker):
-    """No-op reranker — keeps input order. Use when LLM rerank is too slow."""
+    """No-op reranker — keeps input order."""
 
     async def rank(
         self,
@@ -97,9 +84,3 @@ def get_reranker() -> Reranker:
 def set_reranker(r: Reranker) -> None:
     global _default
     _default = r
-
-
-async def _call_chat_json_async(messages: list[dict[str, str]]) -> dict[str, Any]:
-    import asyncio
-
-    return await asyncio.to_thread(chat_json, messages)

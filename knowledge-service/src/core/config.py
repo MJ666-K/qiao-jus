@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     embedding_model_id: str = "text-embedding-v3"
     embedding_dim: int = 1024
 
+    rerank_model_id: str = "qwen3-rerank"
+    rerank_api_url: str = "https://dashscope.aliyuncs.com/compatible-api/v1/reranks"
+    rerank_instruct: str = (
+        "Given a web search query, retrieve relevant passages that answer the query."
+    )
+
     chunk_parent_tokens: int = 1200
     chunk_child_tokens: int = 300
     chunk_overlap_tokens: int = 50
