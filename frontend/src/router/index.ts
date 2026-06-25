@@ -53,16 +53,32 @@ const router = createRouter({
           meta: { title: '知识图谱', fluid: true },
         },
         {
-          path: 'chat',
-          name: 'chat',
+          path: 'assistants',
+          name: 'assistants',
           component: () => import('@/views/ChatView.vue'),
-          meta: { title: '智能问答', fillHeight: true, fluid: true },
+          meta: { title: '我的助手', fillHeight: true, fluid: true },
         },
         {
-          path: 'chat/:conversationId?',
-          name: 'chat-with-conversation',
+          path: 'assistants/:assistantId',
+          name: 'assistant-home',
           component: () => import('@/views/ChatView.vue'),
-          meta: { title: '智能问答', fillHeight: true, fluid: true },
+          meta: { title: '我的助手', fillHeight: true, fluid: true },
+        },
+        {
+          path: 'assistants/:assistantId/c/:conversationId',
+          name: 'assistant-chat',
+          component: () => import('@/views/ChatView.vue'),
+          meta: { title: '我的助手', fillHeight: true, fluid: true },
+        },
+        {
+          path: 'chat',
+          redirect: '/assistants',
+        },
+        {
+          path: 'chat/:conversationId',
+          name: 'chat-legacy',
+          component: () => import('@/views/ChatView.vue'),
+          meta: { title: '我的助手', fillHeight: true, fluid: true },
         },
         {
           path: 'reports',

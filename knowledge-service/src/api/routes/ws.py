@@ -12,6 +12,7 @@ from core.llm import stream_chat, chat
 from core.security import TokenError, decode_token
 from core.tenant import CurrentUser, set_current_user
 from models.base import (
+    Assistant,
     Conversation,
     Message,
     MessageCitation,
@@ -127,44 +128,37 @@ async def _init_or_restore_conversation(
     ws: WebSocket, user_id: str, tenant_id: str, msg: dict[str, Any]
 ) -> Conversation | None:
     conv_id = msg.get("conversation_id")
+    if not conv_id:
+        await _send_error(ws, "conversation_id required")
+        return None
     async with SessionLocal() as s:
-        conv: Conversation | None = None
-        if conv_id:
-            conv = await s.get(Conversation, _uuid(conv_id))
-            if not conv or str(conv.tenant_id) != tenant_id:
-                await _send_error(ws, "conversation not found")
-                return None
-        else:
-            conv = Conversation(
-                tenant_id=_uuid(tenant_id),
-                user_id=_uuid(user_id),
-                title="新对话",
-            )
-            s.add(conv)
-            await s.commit()
-            await s.refresh(conv)
+        conv = await s.get(Conversation, _uuid(conv_id))
+        if not conv or str(conv.tenant_id) != tenant_id:
+            await _send_error(ws, "conversation not found")
+            return None
+        if not conv.assistant_id:
+            await _send_error(ws, "conversation has no assistant")
+            return None
     await ws.send_json(
         {
             "type": "connected",
             "session_id": str(conv.id),
-            "report_ids": _conv_report_ids(conv),
-            "dataset_ids": _conv_dataset_ids(conv),
+            "assistant_id": str(conv.assistant_id),
         }
     )
     return conv
 
 
-def _conv_dataset_ids(conv: Conversation) -> list[str]:
-    raw = conv.dataset_ids or []
-    return [str(x) for x in raw if x]
-
-
-def _conv_report_ids(conv: Conversation) -> list[str]:
-    raw = conv.report_ids or []
-    ids = [str(x) for x in raw if x]
-    if not ids and conv.report_id:
-        ids = [str(conv.report_id)]
-    return ids
+async def _load_assistant_bindings(conv: Conversation) -> tuple[list[str], list[str], bool]:
+    if not conv.assistant_id:
+        return [], [], True
+    async with SessionLocal() as s:
+        assistant = await s.get(Assistant, conv.assistant_id)
+        if not assistant:
+            return [], [], True
+        dataset_ids = [str(x) for x in (assistant.dataset_ids or []) if x]
+        report_ids = [str(x) for x in (assistant.report_ids or []) if x]
+        return dataset_ids, report_ids, assistant.enable_thinking
 
 
 async def _handle_message(
@@ -191,8 +185,7 @@ async def _handle_message(
         await s.refresh(user_msg)
         history_rows = await _load_history(s, conv.id, HISTORY_TURNS)
 
-    dataset_ids = _conv_dataset_ids(conv)
-    report_ids = _conv_report_ids(conv)
+    dataset_ids, report_ids, _assistant_thinking = await _load_assistant_bindings(conv)
     has_rag = bool(dataset_ids) or bool(report_ids)
 
     await ws.send_json({"type": "status", "content": "思考中..."})

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import (
     admin,
+    assistants,
     auth,
     chunks,
     conversations,
@@ -65,6 +66,7 @@ app.include_router(graph.router)
 app.include_router(stats.router)
 app.include_router(meta.router)
 app.include_router(reports.router)
+app.include_router(assistants.router)
 app.include_router(conversations.router)
 app.include_router(admin.router)
 app.include_router(settings_api.router)

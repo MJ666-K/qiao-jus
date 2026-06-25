@@ -1,8 +1,10 @@
 import { apiClient } from './client'
 import type { Conversation, ConversationCreate, ConversationSummary } from '@/types'
 
-export async function listConversations(): Promise<ConversationSummary[]> {
-  const res = await apiClient.get<ConversationSummary[]>('/conversations')
+export async function listConversations(assistantId: string): Promise<ConversationSummary[]> {
+  const res = await apiClient.get<ConversationSummary[]>('/conversations', {
+    params: { assistant_id: assistantId },
+  })
   return res.data
 }
 

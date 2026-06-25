@@ -212,13 +212,35 @@ export interface AnalyzeRequest {
   extra_context?: string
 }
 
+export interface AssistantSummary {
+  id: string
+  name: string
+  description?: string | null
+  dataset_ids?: string[]
+  report_ids?: string[]
+  conversation_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Assistant extends AssistantSummary {
+  tenant_id: string
+  user_id: string
+  enable_thinking: boolean
+}
+
+export interface AssistantCreate {
+  name?: string
+  description?: string
+  dataset_ids?: string[]
+  report_ids?: string[]
+  enable_thinking?: boolean
+}
+
 export interface ConversationSummary {
   id: string
+  assistant_id: string
   title: string
-  report_id?: string | null
-  report_ids?: string[]
-  dataset_ids?: string[]
-  track?: string | null
   message_count: number
   enable_thinking: boolean
   created_at: string
@@ -239,11 +261,8 @@ export interface Conversation {
   id: string
   tenant_id: string
   user_id: string
-  report_id?: string | null
-  report_ids?: string[]
-  dataset_ids?: string[]
+  assistant_id: string
   title: string
-  track?: string | null
   enable_thinking: boolean
   created_at: string
   updated_at: string
@@ -251,11 +270,8 @@ export interface Conversation {
 }
 
 export interface ConversationCreate {
+  assistant_id: string
   title?: string
-  report_id?: string
-  report_ids?: string[]
-  dataset_ids?: string[]
-  track?: string
   enable_thinking?: boolean
 }
 
@@ -265,7 +281,7 @@ export type WsClientMessage =
   | { type: 'stop' }
 
 export type WsServerMessage =
-  | { type: 'connected'; session_id: string; report_ids?: string[]; dataset_ids?: string[] }
+  | { type: 'connected'; session_id: string; assistant_id?: string }
   | { type: 'status'; content: string }
   | { type: 'token'; content: string }
   | { type: 'citation'; chunk_id?: string; document_id?: string; source_type: SourceType; source_title: string; excerpt?: string; page?: number }

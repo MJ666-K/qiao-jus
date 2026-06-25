@@ -106,14 +106,14 @@ onMounted(async () => {
       <div class="hero-text">
         <p class="hero-greet">你好，{{ displayName }}</p>
         <h2 class="hero-title">法律智能辅助工作台</h2>
-        <p class="hero-sub">上传材料、生成报告、智能问答，一站完成</p>
+        <p class="hero-sub">上传材料、生成报告、我的助手，一站完成</p>
       </div>
       <div class="hero-actions">
         <el-button type="primary" size="large" :icon="Tools" @click="router.push('/reports/new')">
           生成报告
         </el-button>
-        <el-button size="large" :icon="ChatDotRound" @click="router.push('/chat')">
-          智能问答
+        <el-button size="large" :icon="ChatDotRound" @click="router.push('/assistants')">
+          我的助手
         </el-button>
       </div>
     </section>

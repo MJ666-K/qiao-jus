@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { createAssistant } from '@/api/assistants'
 import { createConversation } from '@/api/conversations'
 import { useReportsStore } from '@/stores/reports'
 import type { RiskItem, SourceType } from '@/types'
@@ -79,13 +80,21 @@ function stopPolling() {
 async function startReportChat() {
   if (!store.currentReport) return
   try {
-    const conv = await createConversation({
-      title: `${reportTypeLabel[store.currentReport.type] || '报告'}问答`,
+    const label = reportTypeLabel[store.currentReport.type] || '报告'
+    const assistant = await createAssistant({
+      name: `${label}助手`,
       report_ids: [store.currentReport.id],
     })
-    router.push({ name: 'chat-with-conversation', params: { conversationId: conv.id } })
+    const conv = await createConversation({
+      assistant_id: assistant.id,
+      title: `${label}问答`,
+    })
+    router.push({
+      name: 'assistant-chat',
+      params: { assistantId: assistant.id, conversationId: conv.id },
+    })
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '创建会话失败')
+    ElMessage.error(e instanceof Error ? e.message : '创建失败')
   }
 }
 

@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
-  ChatDotRound,
+  Avatar,
   Collection,
   DataAnalysis,
   DocumentCopy,
+  Expand,
   Files,
+  Fold,
   Grid,
   Search,
   Setting,
@@ -14,120 +16,165 @@ import {
   SwitchButton,
   Tools,
   User,
-} from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+} from "@element-plus/icons-vue";
+import { useAuthStore } from "@/stores/auth";
 
 interface NavItem {
-  path: string
-  label: string
-  icon: typeof Grid
-  exact?: boolean
-  adminOnly?: boolean
+  path: string;
+  label: string;
+  icon: typeof Grid;
+  exact?: boolean;
+  adminOnly?: boolean;
 }
 
 interface NavGroup {
-  label: string
-  items: NavItem[]
+  label: string;
+  items: NavItem[];
 }
 
-const route = useRoute()
-const router = useRouter()
-const auth = useAuthStore()
+const route = useRoute();
+const router = useRouter();
+const auth = useAuthStore();
 
 const allNavItems: NavItem[] = [
-  { path: '/dashboard', label: '概览', icon: DataAnalysis },
-  { path: '/documents', label: '我的文档', icon: Files },
-  { path: '/reports/new', label: '生成报告', icon: Tools, exact: true },
-  { path: '/reports', label: '我的报告', icon: DocumentCopy },
-  { path: '/chat', label: '智能问答', icon: ChatDotRound },
-  { path: '/datasets', label: '平台知识库', icon: Collection, adminOnly: true },
-  { path: '/search', label: '检索测试', icon: Search, adminOnly: true },
-  { path: '/graph', label: '知识图谱', icon: Share, adminOnly: true },
-  { path: '/settings', label: '系统配置', icon: Setting },
-]
+  { path: "/dashboard", label: "概览", icon: DataAnalysis },
+  { path: "/documents", label: "我的文档", icon: Files },
+  { path: "/reports/new", label: "生成报告", icon: Tools, exact: true },
+  { path: "/reports", label: "我的报告", icon: DocumentCopy },
+  { path: "/assistants", label: "我的助手", icon: Avatar },
+  { path: "/datasets", label: "平台知识库", icon: Collection, adminOnly: true },
+  { path: "/search", label: "检索测试", icon: Search, adminOnly: true },
+  { path: "/graph", label: "知识图谱", icon: Share, adminOnly: true },
+  { path: "/settings", label: "系统配置", icon: Setting },
+];
 
 const navGroups = computed<NavGroup[]>(() => {
-  const isAdmin = auth.user?.role === 'admin'
-  const work: NavItem[] = []
-  const platform: NavItem[] = []
+  const isAdmin = auth.user?.role === "admin";
+  const work: NavItem[] = [];
+  const platform: NavItem[] = [];
   for (const item of allNavItems) {
-    if (item.adminOnly && !isAdmin) continue
-    if (item.adminOnly) platform.push(item)
-    else work.push(item)
+    if (item.adminOnly && !isAdmin) continue;
+    if (item.adminOnly) platform.push(item);
+    else work.push(item);
   }
-  const groups: NavGroup[] = [{ label: '工作台', items: work }]
-  if (platform.length) groups.push({ label: '平台管理', items: platform })
-  return groups
-})
+  const groups: NavGroup[] = [{ label: "工作台", items: work }];
+  if (platform.length) groups.push({ label: "平台管理", items: platform });
+  return groups;
+});
 
-const isAdmin = computed(() => auth.user?.role === 'admin')
-const roleLabel = computed(() => (isAdmin.value ? '管理员' : '普通用户'))
+const isAdmin = computed(() => auth.user?.role === "admin");
+const roleLabel = computed(() => (isAdmin.value ? "管理员" : "普通用户"));
 
-const isFluid = computed(() => Boolean(route.meta.fluid || route.meta.fillHeight))
+const isFluid = computed(() =>
+  Boolean(route.meta.fluid || route.meta.fillHeight),
+);
+
+const SIDEBAR_COLLAPSED_KEY = "app_sidebar_collapsed";
+const sidebarCollapsed = ref(
+  localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1",
+);
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  localStorage.setItem(
+    SIDEBAR_COLLAPSED_KEY,
+    sidebarCollapsed.value ? "1" : "0",
+  );
+}
 
 function isActive(item: NavItem): boolean {
-  if (item.exact) return route.path === item.path
-  if (item.path === '/reports') {
-    return route.path.startsWith('/reports') && !route.path.startsWith('/reports/new')
+  if (item.exact) return route.path === item.path;
+  if (item.path === "/reports") {
+    return (
+      route.path.startsWith("/reports") &&
+      !route.path.startsWith("/reports/new")
+    );
   }
-  return route.path.startsWith(item.path) && route.path.length >= item.path.length
+  return (
+    route.path.startsWith(item.path) && route.path.length >= item.path.length
+  );
 }
 
 const avatarText = computed(() => {
-  const name = auth.user?.display_name || auth.user?.email
-  if (!name) return '?'
-  return name.charAt(0).toUpperCase()
-})
+  const name = auth.user?.display_name || auth.user?.email;
+  if (!name) return "?";
+  return name.charAt(0).toUpperCase();
+});
 
-const displayName = computed(() => auth.user?.display_name || auth.user?.email?.split('@')[0] || '—')
+const displayName = computed(
+  () => auth.user?.display_name || auth.user?.email?.split("@")[0] || "—",
+);
 
 function handleUserCommand(cmd: string) {
-  if (cmd === 'settings') router.push('/settings')
-  else if (cmd === 'logout') {
-    auth.logout()
-    router.push('/login')
+  if (cmd === "settings") router.push("/settings");
+  else if (cmd === "logout") {
+    auth.logout();
+    router.push("/login");
   }
 }
 
 onMounted(async () => {
-  if (!auth.user && localStorage.getItem('ks_token')) {
-    await auth.ensureUser()
+  if (!auth.user && localStorage.getItem("ks_token")) {
+    await auth.ensureUser();
   }
-})
+});
 </script>
 
 <template>
   <div class="layout">
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ 'sidebar--collapsed': sidebarCollapsed }">
       <div class="brand">
         <div class="brand-icon">枫</div>
-        <div class="brand-text">
+        <div v-show="!sidebarCollapsed" class="brand-text">
           <div class="brand-title">枫桥智诉</div>
           <div class="brand-sub">法律智能辅助</div>
         </div>
+        <button
+          type="button"
+          class="sidebar-toggle"
+          :title="sidebarCollapsed ? '展开导航' : '收起导航'"
+          @click="toggleSidebar"
+        >
+          <el-icon
+            ><component :is="sidebarCollapsed ? Expand : Fold"
+          /></el-icon>
+        </button>
       </div>
 
       <nav class="nav">
         <div v-for="group in navGroups" :key="group.label" class="nav-group">
-          <div class="nav-group-label">{{ group.label }}</div>
+          <div v-show="!sidebarCollapsed" class="nav-group-label">
+            {{ group.label }}
+          </div>
           <router-link
             v-for="item in group.items"
             :key="item.path"
             :to="item.path"
             class="nav-item"
             :class="{ active: isActive(item) }"
+            :title="sidebarCollapsed ? item.label : undefined"
           >
             <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
-            <span>{{ item.label }}</span>
+            <span v-show="!sidebarCollapsed">{{ item.label }}</span>
           </router-link>
         </div>
       </nav>
 
       <div class="sidebar-footer">
-        <el-dropdown v-if="auth.user" trigger="click" placement="top-start" @command="handleUserCommand">
-          <div class="user-trigger">
-            <el-avatar :size="34" class="user-avatar">{{ avatarText }}</el-avatar>
-            <div class="user-info">
+        <el-dropdown
+          v-if="auth.user"
+          trigger="click"
+          placement="top-start"
+          @command="handleUserCommand"
+        >
+          <div
+            class="user-trigger"
+            :class="{ 'user-trigger--compact': sidebarCollapsed }"
+          >
+            <el-avatar :size="34" class="user-avatar">{{
+              avatarText
+            }}</el-avatar>
+            <div v-show="!sidebarCollapsed" class="user-info">
               <span class="user-name">{{ displayName }}</span>
               <span class="user-role">{{ roleLabel }}</span>
             </div>
@@ -156,11 +203,16 @@ onMounted(async () => {
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <h1 class="page-heading">{{ (route.meta.title as string) || '枫桥智诉' }}</h1>
+      <header v-if="!route.meta.fillHeight" class="topbar">
+        <h1 class="page-heading">
+          {{ (route.meta.title as string) || "枫桥智诉" }}
+        </h1>
       </header>
 
-      <section class="content" :class="{ 'content--fill': route.meta.fillHeight }">
+      <section
+        class="content"
+        :class="{ 'content--fill': route.meta.fillHeight }"
+      >
         <div
           class="page-shell"
           :class="{
@@ -178,7 +230,9 @@ onMounted(async () => {
 <style scoped>
 .layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--brand-bg);
 }
 
@@ -191,11 +245,18 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   border-right: 1px solid rgb(0 0 0 / 20%);
+  transition:
+    width 0.22s ease,
+    padding 0.22s ease;
+}
+
+.sidebar--collapsed {
+  width: 68px;
+  padding: 16px 8px;
 }
 
 .brand {
@@ -203,6 +264,39 @@ onMounted(async () => {
   gap: 10px;
   align-items: center;
   padding: 6px 8px 20px;
+  position: relative;
+}
+
+.sidebar--collapsed .brand {
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 4px 16px;
+}
+
+.sidebar-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 8%);
+  color: #a8a29e;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.sidebar--collapsed .sidebar-toggle {
+  margin-left: 0;
+}
+
+.sidebar-toggle:hover {
+  background: rgb(255 255 255 / 14%);
+  color: #e7e5e4;
 }
 
 .brand-icon {
@@ -257,8 +351,20 @@ onMounted(async () => {
   color: #a8a29e;
   text-decoration: none;
   font-size: 13px;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   margin-bottom: 2px;
+}
+
+.sidebar--collapsed .nav-item {
+  justify-content: center;
+  padding: 10px 8px;
+}
+
+.user-trigger--compact {
+  justify-content: center;
+  padding: 8px 4px;
 }
 
 .nav-icon {
@@ -346,6 +452,9 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .topbar {
@@ -384,6 +493,10 @@ onMounted(async () => {
 .content--fill .page-shell--fill {
   flex: 1;
   min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 :deep(.el-dropdown-menu__item) {

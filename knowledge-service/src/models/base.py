@@ -171,6 +171,31 @@ class Report(Base):
     )
 
 
+class Assistant(Base):
+    __tablename__ = "assistants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), default="新助手")
+    description: Mapped[str | None] = mapped_column(Text)
+    dataset_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    report_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    enable_thinking: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="assistant", cascade="all, delete-orphan"
+    )
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
@@ -180,6 +205,9 @@ class Conversation(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    assistant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assistants.id", ondelete="CASCADE"), index=True
     )
     report_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("reports.id", ondelete="SET NULL"), index=True
@@ -195,6 +223,7 @@ class Conversation(Base):
     )
 
     report: Mapped[Report | None] = relationship(back_populates="conversations")
+    assistant: Mapped[Assistant | None] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at"
     )
