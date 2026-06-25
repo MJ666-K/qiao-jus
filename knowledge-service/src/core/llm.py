@@ -34,7 +34,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 def chat(
     messages: list[dict[str, str]],
     *,
-    temperature: float = 0.2,
+    temperature: float | None = None,
     response_json: bool = False,
     max_tokens: int | None = None,
 ) -> str:
@@ -44,7 +44,7 @@ def chat(
     kwargs: dict[str, Any] = {
         "model": f"openai/{settings.llm_model_id}",
         "messages": messages,
-        "temperature": temperature,
+        "temperature": temperature if temperature is not None else settings.llm_chat_temperature,
         "max_tokens": max_tokens or settings.llm_max_tokens,
         **_common_kwargs(),
     }
@@ -54,8 +54,9 @@ def chat(
     return resp.choices[0].message.content or ""
 
 
-def chat_json(messages: list[dict[str, str]], *, temperature: float = 0.1) -> Any:
-    raw = chat(messages, temperature=temperature, response_json=True)
+def chat_json(messages: list[dict[str, str]], *, temperature: float | None = None) -> Any:
+    temp = temperature if temperature is not None else settings.llm_json_temperature
+    raw = chat(messages, temperature=temp, response_json=True)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -122,13 +123,13 @@ async def rerank_documents(
 async def stream_chat(
     messages: list[dict[str, str]],
     *,
-    temperature: float = 0.4,
+    temperature: float | None = None,
     max_tokens: int | None = None,
 ) -> AsyncIterator[str]:
     kwargs: dict[str, Any] = {
         "model": f"openai/{settings.llm_model_id}",
         "messages": messages,
-        "temperature": temperature,
+        "temperature": temperature if temperature is not None else settings.llm_stream_temperature,
         "max_tokens": max_tokens or settings.llm_max_tokens,
         "stream": True,
         "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},

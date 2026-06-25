@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     llm_api_key: str
     llm_model_id: str = "qwen-plus"
     llm_max_tokens: int = 8000
+    llm_chat_temperature: float = 0.2
+    llm_stream_temperature: float = 0.4
+    llm_json_temperature: float = 0.1
+    llm_suggest_temperature: float = 0.3
 
     # Embedding model id at the same OpenAI-compatible endpoint.
     embedding_model_id: str = "text-embedding-v3"

@@ -282,7 +282,7 @@ class ReportGenerationSkill(Skill):
             {"role": "user", "content": user_msg},
         ]
         try:
-            report = chat_json(messages, temperature=0.2)
+            report = chat_json(messages)
         except Exception as e:
             logger.exception("LLM JSON failed for report_type=%s", report_type)
             raise RuntimeError(f"LLM 报告生成失败: {e}") from e

@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 
+from core.config import settings
 from core.llm import stream_chat, chat
 from core.security import TokenError, decode_token
 from core.tenant import CurrentUser, set_current_user
@@ -218,7 +219,7 @@ async def _handle_message(
     streamed_text: list[str] = []
     suggested: list[str] = []
     try:
-        async for chunk in stream_chat(messages, temperature=0.4):
+        async for chunk in stream_chat(messages):
             if stop_event.is_set():
                 break
             streamed_text.append(chunk)
@@ -240,7 +241,7 @@ async def _handle_message(
         {"role": "user", "content": f"用户问题：{user_content}\n\n助手回答：{answer}"},
     ]
     try:
-        suggested_text = chat(sug_prompt, temperature=0.3)
+        suggested_text = chat(sug_prompt, temperature=settings.llm_suggest_temperature)
         if suggested_text:
             raw_qs = suggested_text.strip()
             suggested = []
