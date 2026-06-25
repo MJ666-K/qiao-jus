@@ -101,7 +101,7 @@ main() {
         build_frontend
         build_backend
         echo ">>> 启动容器..."
-        docker compose up -d
+        # docker compose up -d
     fi
 
     cat <<EOF
@@ -113,13 +113,6 @@ main() {
   静态:   $APP_DIR/
   停止:   docker compose down
   日志:   docker compose logs -f
-
-首次部署需创建管理员:
-  ./scripts/bootstrap_user.sh
-
-后端代码/依赖更新后:
-  ./scripts/deploy.sh --rebuild-backend   # 依赖或 Dockerfile 变了
-  ./scripts/deploy.sh                     # 只改 src 时，普通 deploy 即可（复用 pip 缓存层）
 EOF
 }
 

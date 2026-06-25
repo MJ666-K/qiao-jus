@@ -105,6 +105,11 @@ const canCreateLibrary = computed(() =>
   activeTab.value === "user" ? true : isAdmin.value,
 );
 
+/** 私有库所有用户可上传；平台公共库仅管理员 */
+const canUploadDocuments = computed(
+  () => activeTab.value === "user" || (activeTab.value === "platform" && isAdmin.value),
+);
+
 const docTypeOptions = computed(() =>
   DOC_TYPES.filter(
     (t) => t.scope === (activeTab.value === "platform" ? "platform" : "user"),
@@ -445,6 +450,11 @@ function canManageLibrary(ds: Dataset) {
   return isAdmin.value;
 }
 
+function canManageDoc(doc: DocumentItem): boolean {
+  if (!isPlatformDoc(doc)) return true;
+  return isAdmin.value;
+}
+
 async function handleDocAction(cmd: string, doc: DocumentItem) {
   if (cmd === "reindex") await reindex(doc.id);
   else if (cmd === "delete") await remove(doc.id);
@@ -640,7 +650,7 @@ onUnmounted(() => {
                 >刷新</el-button
               >
               <el-button
-                v-if="activeTab === 'user'"
+                v-if="canUploadDocuments"
                 type="primary"
                 :icon="Upload"
                 @click="openUploadDialog"
@@ -650,8 +660,9 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <p v-if="activeTab === 'user'" class="upload-hint">
+          <p v-if="canUploadDocuments" class="upload-hint">
             支持批量上传 PDF、DOCX、MD、TXT、HTML
+            <template v-if="activeTab === 'platform'">（平台公共库，仅管理员可维护）</template>
           </p>
           <p v-else class="upload-hint muted">
             平台公共库只读，如需扩充请联系管理员
@@ -666,7 +677,7 @@ onUnmounted(() => {
               "
             >
               <el-button
-                v-if="activeTab === 'user'"
+                v-if="canUploadDocuments"
                 type="primary"
                 :icon="Upload"
                 @click="openUploadDialog"
@@ -738,7 +749,7 @@ onUnmounted(() => {
                           文本块
                         </button>
                         <el-dropdown
-                          v-if="!isPlatformDoc(doc)"
+                          v-if="canManageDoc(doc)"
                           trigger="click"
                           @command="(cmd: string) => handleDocAction(cmd, doc)"
                         >
@@ -984,7 +995,7 @@ onUnmounted(() => {
 
           <div class="detail-actions">
             <el-button type="primary" @click="goToChunks(detailDoc.id)">文本块管理</el-button>
-            <template v-if="!isPlatformDoc(detailDoc)">
+            <template v-if="canManageDoc(detailDoc)">
               <el-button @click="reindex(detailDoc.id)">重新索引</el-button>
               <el-button type="danger" plain @click="remove(detailDoc.id)">删除</el-button>
             </template>
