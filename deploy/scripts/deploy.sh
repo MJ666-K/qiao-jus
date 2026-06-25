@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一键部署：构建前端 → deploy/app/，构建后端镜像，docker compose up
+# 一键部署：构建前端 → deploy/app/，按需构建后端镜像，docker compose up
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,19 +7,27 @@ DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 PROJECT_ROOT="$(dirname "$DEPLOY_DIR")"
 DATA_DIR="$DEPLOY_DIR/data"
 APP_DIR="$DEPLOY_DIR/app"
+API_IMAGE="${FENGQIAO_API_IMAGE:-fengqiao-api:latest}"
 
 usage() {
     cat <<'EOF'
 用法: ./scripts/deploy.sh [选项]
 
-  (无选项)    构建前端 + 后端镜像，并启动全部容器
-  --up-only   跳过构建，仅 docker compose up -d
-  --help      显示此帮助
+  (无选项)           构建前端 + 后端镜像（Docker 层缓存，无变更时很快）
+  --rebuild-backend  强制无缓存重建后端镜像（改依赖/Dockerfile 时用）
+  --up-only          跳过构建，仅 docker compose up -d
+  --help             显示此帮助
+
+说明:
+  并非每次都会重装 pip 依赖。Dockerfile 分层后：
+  · pyproject.toml 未改 → pip 依赖层 CACHED
+  · 仅改 src/ → 只重建最后几层，秒~分钟级
+  · 改 Dockerfile 或依赖 → 需 --rebuild-backend
 
 目录:
-  deploy/data/   数据库持久化（postgres / qdrant / neo4j / redis）
+  deploy/data/   数据库持久化
   deploy/app/    前端静态文件（nginx 根目录）
-  deploy/.env    容器环境变量（Docker 内网服务名）
+  deploy/.env    容器环境变量
 EOF
 }
 
@@ -43,11 +51,27 @@ require_frontend() {
     fi
 }
 
+image_exists() {
+    docker image inspect "$API_IMAGE" >/dev/null 2>&1
+}
+
+build_backend() {
+    if [ "$force_rebuild_backend" -eq 1 ]; then
+        echo ">>> 强制重建后端镜像（--no-cache）..."
+        docker build --no-cache -t "$API_IMAGE" "$PROJECT_ROOT/knowledge-service"
+    else
+        echo ">>> 构建后端镜像（有缓存则跳过未变层）..."
+        "$SCRIPT_DIR/build-image.sh"
+    fi
+}
+
 main() {
     local up_only=0
+    force_rebuild_backend=0
     for arg in "$@"; do
         case "$arg" in
             --up-only) up_only=1 ;;
+            --rebuild-backend) force_rebuild_backend=1 ;;
             -h|--help) usage; exit 0 ;;
             *) echo "未知选项: $arg"; usage; exit 1 ;;
         esac
@@ -75,8 +99,7 @@ main() {
         docker compose up -d
     else
         build_frontend
-        echo ">>> 构建后端镜像..."
-        "$SCRIPT_DIR/build-image.sh"
+        build_backend
         echo ">>> 启动容器..."
         docker compose up -d
     fi
@@ -91,9 +114,12 @@ main() {
   停止:   docker compose down
   日志:   docker compose logs -f
 
-首次部署需创建管理员（生产库无 seed 账号）:
+首次部署需创建管理员:
   ./scripts/bootstrap_user.sh
-  # 默认 seed@demo.com / seed12345；密码至少 8 位
+
+后端代码/依赖更新后:
+  ./scripts/deploy.sh --rebuild-backend   # 依赖或 Dockerfile 变了
+  ./scripts/deploy.sh                     # 只改 src 时，普通 deploy 即可（复用 pip 缓存层）
 EOF
 }
 

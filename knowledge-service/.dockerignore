@@ -1,6 +1,7 @@
 .venv/
 venv/
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.egg-info/
 .eggs/
@@ -9,8 +10,13 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.env
-.env.local
+tests/
+docs/
 *.log
 .run/
 .git/
+.env
+.env.*
+!.env.example
+Dockerfile
+README.md

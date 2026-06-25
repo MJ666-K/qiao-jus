@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+IMAGE="${FENGQIAO_API_IMAGE:-fengqiao-api:latest}"
 
-docker build -t fengqiao-api:latest "$PROJECT_ROOT/knowledge-service"
+docker build -t "$IMAGE" "$PROJECT_ROOT/knowledge-service"
 
-echo "✓ fengqiao-api:latest 构建完成"
-echo "  部署: cd deploy && ./scripts/deploy.sh"
+echo "✓ $IMAGE 构建完成"
