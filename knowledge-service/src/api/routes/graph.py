@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from uuid import UUID
 
 from api.deps import CurrentUserDep
 from pipeline.graph_global import global_answer
@@ -9,6 +10,7 @@ from storage.neo4j_client import (
     create_relation,
     delete_relation,
     list_communities_async,
+    query_dataset_graph,
 )
 
 router = APIRouter(prefix="/graph", tags=["graph"])
@@ -55,6 +57,21 @@ def _to_edges(raw_relations: list[dict]) -> list[GraphEdge]:
             )
         )
     return edges
+
+
+@router.get("/dataset", response_model=GraphQueryResult)
+async def dataset_graph(
+    user: CurrentUserDep,
+    dataset_id: UUID,
+    limit: int = Query(default=200, ge=1, le=500),
+):
+    """Load the full relationship graph scoped to one knowledge dataset."""
+    res = await query_dataset_graph(str(user.tenant_id), str(dataset_id), limit=limit)
+    return GraphQueryResult(
+        entities=_to_nodes(res.get("entities", [])),
+        relations=_to_edges(res.get("relations", [])),
+        related_chunks=[],
+    )
 
 
 @router.post("/local", response_model=GraphQueryResult)

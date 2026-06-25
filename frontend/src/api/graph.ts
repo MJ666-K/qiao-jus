@@ -20,6 +20,16 @@ export async function fetchGraphStats(): Promise<{ entity_count: number }> {
   return data
 }
 
+export async function datasetGraph(
+  datasetId: string,
+  limit = 200,
+): Promise<GraphQueryResult> {
+  const { data } = await apiClient.get<GraphQueryResult>('/graph/dataset', {
+    params: { dataset_id: datasetId, limit },
+  })
+  return normalizeGraphResult(data)
+}
+
 export async function localGraph(payload: {
   query: string
   depth?: number

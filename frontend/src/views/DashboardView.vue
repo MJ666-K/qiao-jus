@@ -7,21 +7,17 @@ import {
   DocumentCopy,
   Files,
   FolderOpened,
-  Grid,
   Right,
   Tools,
 } from '@element-plus/icons-vue'
-import { fetchStats } from '@/api/stats'
 import { listAllDocuments } from '@/api/documents'
 import { listReports } from '@/api/reports'
 import { useAuthStore } from '@/stores/auth'
-import type { DocumentItem, Report, Stats } from '@/types'
+import type { DocumentItem, Report } from '@/types'
 
 const router = useRouter()
 const auth = useAuthStore()
-const isAdmin = computed(() => auth.user?.role === 'admin')
 const loading = ref(true)
-const stats = ref<Stats | null>(null)
 const myDocuments = ref<DocumentItem[]>([])
 const myReports = ref<Report[]>([])
 
@@ -41,13 +37,6 @@ const userCards = computed(() => [
   { key: 'pending', label: '处理中', value: userStats.value.pendingDocs, icon: FolderOpened, route: '/documents' },
   { key: 'reports', label: '我的报告', value: userStats.value.reports, icon: DocumentCopy, route: '/reports' },
   { key: 'done', label: '已完成', value: userStats.value.doneReports, icon: Document, route: '/reports' },
-])
-
-const platformCards = computed(() => [
-  { key: 'datasets' as const, label: '知识库', value: stats.value?.datasets ?? 0 },
-  { key: 'documents' as const, label: '文档', value: stats.value?.documents ?? 0 },
-  { key: 'documents_done' as const, label: '已处理', value: stats.value?.documents_done ?? 0 },
-  { key: 'chunks' as const, label: '文本块', value: stats.value?.chunks ?? 0 },
 ])
 
 const recentReports = computed(() => myReports.value.slice(0, 5))
@@ -83,12 +72,10 @@ function docStatusTag(status: string) {
 
 onMounted(async () => {
   try {
-    const [s, docs, reps] = await Promise.all([
-      fetchStats(),
+    const [docs, reps] = await Promise.all([
       listAllDocuments({ status_filter: 'done', uploaded_only: true }).catch(() => []),
       listReports().catch(() => []),
     ])
-    stats.value = s
     myDocuments.value = docs.filter((d: DocumentItem) =>
       ['contract', 'dispute', 'report'].includes(String(d.metadata?.doc_type || '')),
     )
@@ -135,21 +122,6 @@ onMounted(async () => {
         </div>
         <el-icon class="stat-arrow"><Right /></el-icon>
       </div>
-    </section>
-
-    <!-- 平台数据（管理员） -->
-    <section v-if="isAdmin" class="platform-bar card-panel">
-      <div class="platform-label">
-        <el-icon><Grid /></el-icon>
-        <span>平台知识库</span>
-      </div>
-      <div class="platform-metrics">
-        <div v-for="item in platformCards" :key="item.key" class="platform-metric">
-          <span class="pm-value">{{ item.value }}</span>
-          <span class="pm-label">{{ item.label }}</span>
-        </div>
-      </div>
-      <el-button link type="primary" @click="router.push('/datasets')">管理</el-button>
     </section>
 
     <!-- 业务模块 -->
@@ -339,49 +311,6 @@ onMounted(async () => {
 
 .stat-card:hover .stat-arrow {
   color: var(--brand-primary);
-}
-
-/* Platform bar */
-.platform-bar {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 14px 20px;
-  background: #fafaf9;
-}
-
-.platform-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.platform-metrics {
-  display: flex;
-  flex: 1;
-  gap: 28px;
-  flex-wrap: wrap;
-}
-
-.platform-metric {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.pm-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--brand-primary-dark);
-}
-
-.pm-label {
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
 /* Modules */

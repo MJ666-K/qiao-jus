@@ -23,12 +23,6 @@ const router = createRouter({
           meta: { title: '概览' },
         },
         {
-          path: 'datasets',
-          name: 'datasets',
-          component: () => import('@/views/DatasetsView.vue'),
-          meta: { title: '平台知识库' },
-        },
-        {
           path: 'documents',
           name: 'documents',
           component: () => import('@/views/DocumentsView.vue'),

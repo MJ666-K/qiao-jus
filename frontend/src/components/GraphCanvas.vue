@@ -33,10 +33,23 @@ const svgHostRef = ref<HTMLDivElement>()
 let simulation: d3.Simulation<SimNode, SimLink> | null = null
 let zoomBehavior: d3.ZoomBehavior<SVGSVGElement, unknown> | null = null
 let svgEl: d3.Selection<SVGSVGElement, unknown, null, undefined> | null = null
+let nodeSelection: d3.Selection<SVGGElement, SimNode, SVGGElement, unknown> | null = null
+let linkSelection: d3.Selection<SVGPathElement, SimLink, SVGGElement, unknown> | null = null
 const linkSourceId = ref<string | null>(null)
+const positionCache = new Map<string, { x: number; y: number }>()
+let lastGraphSignature = ''
 
 const NODE_R = 12
 const ARROW_PAD = 4
+
+function graphSignature() {
+  const entityIds = (props.graphEntities ?? []).map((e) => e.id).sort().join('\0')
+  const relKeys = (props.graphRelations ?? [])
+    .map((r) => `${r.source}->${r.target}:${r.type ?? 'RELATED'}`)
+    .sort()
+    .join('\0')
+  return `${entityIds}|${relKeys}|${props.linkMode ? 1 : 0}`
+}
 
 function linkEndpoints(d: SimLink) {
   const sx = nodeCoord(d.source).x
@@ -65,13 +78,46 @@ function linkLabel(d: SimLink) {
   return '关联'
 }
 
+function savePositions() {
+  simulation?.nodes().forEach((n) => {
+    if (n.x != null && n.y != null) {
+      positionCache.set(n.id, { x: n.x, y: n.y })
+    }
+  })
+}
+
+function updateHighlightStyles() {
+  nodeSelection
+    ?.select('circle')
+    .attr('stroke', (d) => {
+      if (linkSourceId.value === d.id) return '#f59e0b'
+      if (props.selectedEntityId === d.id) return '#f97316'
+      return '#fff'
+    })
+    .attr('stroke-width', (d) =>
+      linkSourceId.value === d.id || props.selectedEntityId === d.id ? 3 : 2,
+    )
+
+  linkSelection
+    ?.attr('stroke', (d) => (d.key === props.selectedRelationKey ? '#f97316' : '#64748b'))
+    .attr('stroke-width', (d) => (d.key === props.selectedRelationKey ? 2.5 : 1.8))
+}
+
 function render() {
   const host = svgHostRef.value
   if (!host) return
+
+  const signature = graphSignature()
+  if (signature === lastGraphSignature && svgEl) return
+  lastGraphSignature = signature
+
+  savePositions()
   simulation?.stop()
   simulation = null
   zoomBehavior = null
   svgEl = null
+  nodeSelection = null
+  linkSelection = null
   linkSourceId.value = null
   host.innerHTML = ''
 
@@ -108,7 +154,15 @@ function render() {
     })
   svg.call(zoomBehavior).on('dblclick.zoom', null)
 
-  const nodes: SimNode[] = list.map((e) => ({ ...e }))
+  const nodes: SimNode[] = list.map((e) => {
+    const node: SimNode = { ...e }
+    const cached = positionCache.get(e.id)
+    if (cached) {
+      node.x = cached.x
+      node.y = cached.y
+    }
+    return node
+  })
   const nodeById = new Map(nodes.map((n) => [n.id, n]))
   const links: SimLink[] = (props.graphRelations ?? [])
     .filter((r) => nodeById.has(r.source) && nodeById.has(r.target))
@@ -120,6 +174,7 @@ function render() {
     }))
 
   const color = d3.scaleOrdinal(d3.schemeCategory10)
+  const hasCachedLayout = nodes.some((n) => n.x != null && n.y != null)
 
   simulation = d3
     .forceSimulation(nodes)
@@ -136,6 +191,10 @@ function render() {
     )
   }
 
+  if (hasCachedLayout) {
+    simulation.alpha(0.12).restart()
+  }
+
   const link = g
     .append('g')
     .selectAll<SVGPathElement, SimLink>('path')
@@ -143,8 +202,6 @@ function render() {
     .enter()
     .append('path')
     .attr('fill', 'none')
-    .attr('stroke', (d) => (d.key === props.selectedRelationKey ? '#f97316' : '#64748b'))
-    .attr('stroke-width', (d) => (d.key === props.selectedRelationKey ? 2.5 : 1.8))
     .attr('marker-end', 'url(#graph-arrow)')
     .style('cursor', 'pointer')
     .on('click', (event, d) => {
@@ -159,6 +216,8 @@ function render() {
         weight: d.weight,
       })
     })
+
+  linkSelection = link
 
   const linkText = g
     .append('g')
@@ -181,6 +240,8 @@ function render() {
     .append('g')
     .style('cursor', 'pointer')
 
+  nodeSelection = node
+
   const drag = d3
     .drag<SVGGElement, SimNode>()
     .on('start', (event, d) => {
@@ -196,6 +257,9 @@ function render() {
       if (!event.active) simulation?.alphaTarget(0)
       d.fx = null
       d.fy = null
+      if (d.x != null && d.y != null) {
+        positionCache.set(d.id, { x: d.x, y: d.y })
+      }
     })
 
   node.call(drag)
@@ -206,31 +270,23 @@ function render() {
     if (!props.linkMode) return
     if (!linkSourceId.value) {
       linkSourceId.value = d.id
-      highlightNodes(node)
+      updateHighlightStyles()
       return
     }
     if (linkSourceId.value === d.id) {
       linkSourceId.value = null
-      highlightNodes(node)
+      updateHighlightStyles()
       return
     }
     emit('createRelation', { source: linkSourceId.value, target: d.id })
     linkSourceId.value = null
-    highlightNodes(node)
+    updateHighlightStyles()
   })
 
   node
     .append('circle')
     .attr('r', NODE_R)
     .attr('fill', (d) => color(String(d.type || 'default')))
-    .attr('stroke', (d) => {
-      if (linkSourceId.value === d.id) return '#f59e0b'
-      if (props.selectedEntityId === d.id) return '#f97316'
-      return '#fff'
-    })
-    .attr('stroke-width', (d) =>
-      linkSourceId.value === d.id || props.selectedEntityId === d.id ? 3 : 2,
-    )
 
   node
     .append('text')
@@ -240,18 +296,7 @@ function render() {
     .attr('font-size', 11)
     .attr('fill', '#334155')
 
-  function highlightNodes(selection: d3.Selection<SVGGElement, SimNode, SVGGElement, unknown>) {
-    selection
-      .select('circle')
-      .attr('stroke', (d) => {
-        if (linkSourceId.value === d.id) return '#f59e0b'
-        if (props.selectedEntityId === d.id) return '#f97316'
-        return '#fff'
-      })
-      .attr('stroke-width', (d) =>
-        linkSourceId.value === d.id || props.selectedEntityId === d.id ? 3 : 2,
-      )
-  }
+  updateHighlightStyles()
 
   simulation.on('tick', () => {
     link.attr('d', (d) => {
@@ -262,7 +307,10 @@ function render() {
     node.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
   })
 
-  simulation.on('end', () => simulation?.stop())
+  simulation.on('end', () => {
+    savePositions()
+    simulation?.stop()
+  })
 }
 
 function nodeCoord(endpoint: SimNode | string | number): { x: number; y: number } {
@@ -282,18 +330,26 @@ function resetZoom() {
   svgEl.transition().duration(200).call(zoomBehavior.transform, d3.zoomIdentity)
 }
 
-defineExpose({ zoomIn: () => zoomBy(1.3), zoomOut: () => zoomBy(0.75), resetZoom })
+function forceRender() {
+  lastGraphSignature = ''
+  positionCache.clear()
+  render()
+}
+
+defineExpose({ zoomIn: () => zoomBy(1.3), zoomOut: () => zoomBy(0.75), resetZoom, forceRender })
+
+watch(() => graphSignature(), render)
 
 watch(
-  () => [props.graphEntities, props.graphRelations, props.linkMode] as const,
-  () => render(),
-  { deep: true },
+  () => [props.selectedEntityId, props.selectedRelationKey, linkSourceId.value] as const,
+  () => updateHighlightStyles(),
 )
 
 watch(
   () => props.linkMode,
   (on) => {
     if (!on) linkSourceId.value = null
+    updateHighlightStyles()
   },
 )
 

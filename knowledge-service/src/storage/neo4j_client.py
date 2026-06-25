@@ -222,6 +222,59 @@ async def fetch_relations_among(
         ]
 
 
+async def query_dataset_graph(
+    tenant_id: str,
+    dataset_id: str,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Return entities and internal relations for one knowledge dataset."""
+    if not isinstance(limit, int) or limit < 1:
+        limit = 200
+    limit = min(limit, 500)
+    cypher = """
+        MATCH (e:Entity {tenant_id: $tenant, dataset_id: $dataset})
+        WITH e ORDER BY e.name
+        LIMIT $limit
+        WITH collect(e) AS nodes, [n IN collect(e) | n.id] AS ids
+        UNWIND nodes AS node
+        WITH collect({
+            id: node.id, name: node.name, type: node.type,
+            description: node.description
+        }) AS entities, ids
+        OPTIONAL MATCH (a:Entity {tenant_id: $tenant})-[r:RELATED]->(b:Entity {tenant_id: $tenant})
+        WHERE a.id IN ids AND b.id IN ids
+        RETURN entities,
+               collect(DISTINCT {
+                   source: a.id, target: b.id,
+                   type: coalesce(r.type, 'RELATED'),
+                   description: r.description,
+                   weight: coalesce(r.weight, 1.0)
+               }) AS relations
+    """
+    driver = get_driver()
+    async with driver.session() as s:
+        result = await s.run(
+            cypher,
+            tenant=tenant_id,
+            dataset=dataset_id,
+            limit=limit,
+        )
+        record = await result.single()
+        if not record:
+            return {"entities": [], "relations": [], "chunks": []}
+        entities_out = [e for e in (record["entities"] or []) if e and e.get("name")]
+        relations_out = [
+            r
+            for r in (record["relations"] or [])
+            if r and r.get("source") and r.get("target")
+        ]
+        return {
+            "entities": entities_out,
+            "relations": relations_out,
+            "chunks": [],
+        }
+
+
 async def create_relation(
     tenant_id: str,
     source_id: str,

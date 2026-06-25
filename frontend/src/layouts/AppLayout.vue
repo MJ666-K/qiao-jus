@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Avatar,
-  Collection,
   DataAnalysis,
   DocumentCopy,
   Expand,
@@ -42,7 +41,6 @@ const allNavItems: NavItem[] = [
   { path: "/reports/new", label: "生成报告", icon: Tools, exact: true },
   { path: "/reports", label: "我的报告", icon: DocumentCopy },
   { path: "/assistants", label: "我的助手", icon: Avatar },
-  { path: "/datasets", label: "平台知识库", icon: Collection, adminOnly: true },
   { path: "/search", label: "检索测试", icon: Search, adminOnly: true },
   { path: "/graph", label: "知识图谱", icon: Share, adminOnly: true },
   { path: "/settings", label: "系统配置", icon: Setting },
