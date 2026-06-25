@@ -10,10 +10,18 @@ def test_analyze_request_dual_mode():
     doc_mode = AnalyzeRequest(source_doc_id="00000000-0000-0000-0000-000000000000")
     assert doc_mode.source_doc_id is not None
     assert doc_mode.text is None
+    assert doc_mode.resolved_doc_ids() == [doc_mode.source_doc_id]
+
+    multi = AnalyzeRequest(source_doc_ids=[
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+    ])
+    assert len(multi.resolved_doc_ids()) == 2
 
     text_mode = AnalyzeRequest(text="这是一段合同文本", title="测试")
     assert text_mode.text is not None
     assert text_mode.source_doc_id is None
+    assert text_mode.resolved_doc_ids() == []
 
 
 def test_report_out_includes_phase4_fields():
@@ -40,8 +48,10 @@ def test_risk_item_level_enum():
     from schemas.report import RiskItem
     ri = RiskItem(level="高", desc="风险描述")
     assert ri.level == "高"
-    with pytest.raises(ValueError):
-        RiskItem(level="X", desc="bad")
+    ri_en = RiskItem(level="high", desc="english level")
+    assert ri_en.level == "高"
+    ri_unknown = RiskItem(level="X", desc="fallback")
+    assert ri_unknown.level == "中"
 
 
 def test_report_type_literal_complete():

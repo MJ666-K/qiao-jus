@@ -12,7 +12,7 @@ import {
   Tools,
 } from '@element-plus/icons-vue'
 import { fetchStats } from '@/api/stats'
-import { listDocuments } from '@/api/documents'
+import { listAllDocuments } from '@/api/documents'
 import { listReports } from '@/api/reports'
 import { useAuthStore } from '@/stores/auth'
 import type { DocumentItem, Report, Stats } from '@/types'
@@ -85,7 +85,7 @@ onMounted(async () => {
   try {
     const [s, docs, reps] = await Promise.all([
       fetchStats(),
-      listDocuments({}).catch(() => []),
+      listAllDocuments({ status_filter: 'done', uploaded_only: true }).catch(() => []),
       listReports().catch(() => []),
     ])
     stats.value = s

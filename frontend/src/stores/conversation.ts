@@ -17,48 +17,17 @@ export const useConversationStore = defineStore('conversation', () => {
   const statusMessage = ref<string>('')
   const isStreaming = ref(false)
   const isConnected = ref(false)
-  const boundReportId = ref<string | null>(null)
   const error = ref<string | null>(null)
   const pendingCitations = ref<Citation[]>([])
   const enableThinking = ref(true)
 
   let client: WsChatClient | null = null
 
-  async function initConversation(opts: { conversationId?: string; reportId?: string } = {}) {
-    error.value = null
-
-    if (opts.conversationId) {
-      const conv = await getConversation(opts.conversationId)
-      currentConversation.value = conv
-      messages.value = conv.messages
-      boundReportId.value = conv.report_id || null
-      enableThinking.value = conv.enable_thinking ?? true
-    } else {
-      const conv = await createConversation({
-        title: '新对话',
-        report_id: opts.reportId,
-        enable_thinking: enableThinking.value,
-      })
-      currentConversation.value = conv
-      messages.value = []
-      boundReportId.value = conv.report_id || null
-      enableThinking.value = conv.enable_thinking ?? true
-    }
-
-    if (client && isConnected.value) {
-      client.send({
-        type: 'init',
-        conversation_id: currentConversation.value?.id,
-        report_id: boundReportId.value || undefined,
-      })
-      return
-    }
-
+  async function connectWs() {
     if (client) {
       client.close()
       client = null
     }
-
     client = new WsChatClient()
     client.onMessage(handleServerMessage)
     client.onClose(() => {
@@ -69,8 +38,42 @@ export const useConversationStore = defineStore('conversation', () => {
     client.send({
       type: 'init',
       conversation_id: currentConversation.value?.id,
-      report_id: boundReportId.value || undefined,
     })
+  }
+
+  async function initConversation(opts: {
+    conversationId?: string
+    reportIds?: string[]
+    datasetIds?: string[]
+  } = {}) {
+    error.value = null
+
+    if (opts.conversationId) {
+      const conv = await getConversation(opts.conversationId)
+      currentConversation.value = conv
+      messages.value = conv.messages
+      enableThinking.value = conv.enable_thinking ?? true
+    } else {
+      const conv = await createConversation({
+        title: '新对话',
+        report_ids: opts.reportIds || [],
+        dataset_ids: opts.datasetIds || [],
+        enable_thinking: enableThinking.value,
+      })
+      currentConversation.value = conv
+      messages.value = []
+      enableThinking.value = conv.enable_thinking ?? true
+    }
+
+    if (client && isConnected.value) {
+      client.send({
+        type: 'init',
+        conversation_id: currentConversation.value?.id,
+      })
+      return
+    }
+
+    await connectWs()
   }
 
   function handleServerMessage(msg: WsServerMessage) {
@@ -78,9 +81,12 @@ export const useConversationStore = defineStore('conversation', () => {
       case 'connected':
         if (currentConversation.value) {
           currentConversation.value.id = msg.session_id
-        }
-        if (msg.report_id !== undefined) {
-          boundReportId.value = msg.report_id
+          if (msg.dataset_ids) {
+            currentConversation.value.dataset_ids = msg.dataset_ids
+          }
+          if (msg.report_ids) {
+            currentConversation.value.report_ids = msg.report_ids
+          }
         }
         break
       case 'status':
@@ -115,9 +121,6 @@ export const useConversationStore = defineStore('conversation', () => {
         pendingCitations.value = []
         isStreaming.value = false
         break
-      case 'report_bound':
-        boundReportId.value = msg.report_id || null
-        break
       case 'error':
         error.value = msg.message
         isStreaming.value = false
@@ -132,7 +135,9 @@ export const useConversationStore = defineStore('conversation', () => {
   async function sendMessage(content: string) {
     if (!client || !isConnected.value) {
       ElMessage.warning('会话未连接，正在重连...')
-      await initConversation({ reportId: boundReportId.value || undefined })
+      await initConversation({
+        conversationId: currentConversation.value?.id,
+      })
     }
     if (!content.trim()) return
     if (isStreaming.value) {
@@ -180,14 +185,6 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  function bindReport(reportId: string | null) {
-    if (!client || !isConnected.value) {
-      ElMessage.warning('会话未连接')
-      return
-    }
-    client.send({ type: 'bind_report', report_id: reportId || undefined })
-  }
-
   function disconnect() {
     if (client) {
       client.close()
@@ -212,44 +209,42 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
-  async function createConversationAndSet(opts: { reportId?: string } = {}) {
+  async function createConversationAndSet(opts: {
+    reportIds?: string[]
+    datasetIds?: string[]
+    title?: string
+  } = {}) {
     const conv = await createConversation({
-      title: '新对话',
-      report_id: opts.reportId,
+      title: opts.title || '新对话',
+      report_ids: opts.reportIds || [],
+      dataset_ids: opts.datasetIds || [],
       enable_thinking: enableThinking.value,
     })
     currentConversation.value = conv
     messages.value = []
-    boundReportId.value = conv.report_id || null
     enableThinking.value = conv.enable_thinking ?? true
 
     if (client && isConnected.value) {
       client.send({
         type: 'init',
         conversation_id: currentConversation.value?.id,
-        report_id: boundReportId.value || undefined,
       })
       return conv
     }
 
-    if (client) {
-      client.close()
-      client = null
-    }
-
-    client = new WsChatClient()
-    client.onMessage(handleServerMessage)
-    client.onClose(() => {
-      isConnected.value = false
-    })
-    await client.connect()
-    isConnected.value = true
-    client.send({
-      type: 'init',
-      conversation_id: currentConversation.value?.id,
-      report_id: boundReportId.value || undefined,
-    })
+    await connectWs()
     return conv
+  }
+
+  async function updateConversationSettings(
+    id: string,
+    payload: { title?: string; report_ids?: string[]; dataset_ids?: string[] },
+  ) {
+    const updated = await updateConversation(id, payload)
+    if (currentConversation.value?.id === id) {
+      currentConversation.value = updated
+    }
+    return updated
   }
 
   function clearMessages() {
@@ -270,14 +265,13 @@ export const useConversationStore = defineStore('conversation', () => {
     statusMessage,
     isStreaming,
     isConnected,
-    boundReportId,
     enableThinking,
     error,
     initConversation,
     createConversationAndSet,
+    updateConversationSettings,
     sendMessage,
     stopGeneration,
-    bindReport,
     toggleThinking,
     disconnect,
     clearMessages,

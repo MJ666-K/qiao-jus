@@ -85,8 +85,45 @@ async def _load_doc_chunks(doc_id: str, limit: int = 50) -> list[dict[str, Any]]
                 "text": c.text,
                 "title": title,
                 "doc_meta": doc_meta or {},
+                "document_id": doc_id,
             })
         return out
+
+
+async def _load_multi_doc_chunks(doc_ids: list[str], limit_per_doc: int = 20) -> list[dict[str, Any]]:
+    all_chunks: list[dict[str, Any]] = []
+    for doc_id in doc_ids:
+        chunks = await _load_doc_chunks(doc_id, limit=limit_per_doc)
+        all_chunks.extend(chunks)
+    return all_chunks
+
+
+def _compose_doc_text(chunks: list[dict[str, Any]], max_chars: int = 12000) -> tuple[str, dict[str, Any]]:
+    if not chunks:
+        return "", {}
+    sections: list[str] = []
+    current_doc_id = None
+    current_title = "文档"
+    buffer: list[str] = []
+
+    def flush() -> None:
+        nonlocal buffer
+        if buffer:
+            sections.append(f"【文档：{current_title}】\n" + "\n\n".join(buffer))
+            buffer = []
+
+    for c in chunks:
+        doc_id = c.get("document_id")
+        if doc_id != current_doc_id:
+            flush()
+            current_doc_id = doc_id
+            current_title = c.get("title") or "文档"
+        buffer.append(c["text"])
+        if len("\n\n".join(sections)) + len("\n\n".join(buffer)) >= max_chars:
+            break
+    flush()
+    doc_meta = chunks[0].get("doc_meta") or {}
+    return "\n\n".join(sections)[:max_chars], doc_meta
 
 
 def _map_source_type(doc_type: str | None) -> str:
@@ -173,17 +210,20 @@ class ReportGenerationSkill(Skill):
 
     async def execute(self, params: dict[str, Any]) -> dict[str, Any]:
         tenant_id = params["tenant_id"]
+        source_doc_ids = params.get("source_doc_ids") or []
         source_doc_id = params.get("source_doc_id")
+        if not source_doc_ids and source_doc_id:
+            source_doc_ids = [source_doc_id]
         direct_text = params.get("text")
         report_type = params.get("report_type") or "contract_review"
         prompt_cfg = PROMPTS.get(report_type) or PROMPTS["contract_review"]
 
-        if source_doc_id:
-            user_chunks = await _load_doc_chunks(source_doc_id)
+        if source_doc_ids:
+            per_doc = max(10, 30 // len(source_doc_ids))
+            user_chunks = await _load_multi_doc_chunks(source_doc_ids, limit_per_doc=per_doc)
             if not user_chunks:
-                raise ValueError(f"source doc {source_doc_id} has no chunks; cannot generate report")
-            doc_text = "\n\n".join(c["text"] for c in user_chunks[:30])[:8000]
-            doc_meta = user_chunks[0].get("doc_meta") if user_chunks else {}
+                raise ValueError(f"source docs {source_doc_ids} have no chunks; cannot generate report")
+            doc_text, doc_meta = _compose_doc_text(user_chunks)
         elif direct_text:
             doc_text = direct_text[:8000]
             doc_meta = {"doc_type": _infer_doc_type(report_type)}

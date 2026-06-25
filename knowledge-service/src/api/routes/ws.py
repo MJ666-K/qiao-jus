@@ -95,33 +95,6 @@ async def ws_chat(
                     websocket, user_id, tenant_id, msg
                 )
                 continue
-            if mtype == "bind_report":
-                if not conversation:
-                    await _send_error(websocket, "init required before bind_report")
-                    continue
-                report_id = msg.get("report_id")
-                async with SessionLocal() as s:
-                    if report_id:
-                        rep = await s.get(Report, _uuid(report_id))
-                        if not rep or str(rep.tenant_id) != tenant_id:
-                            await _send_error(websocket, "report not found")
-                            continue
-                        conversation.report_id = rep.id
-                    else:
-                        conversation.report_id = None
-                    s.add(conversation)
-                    await s.commit()
-                await websocket.send_json(
-                    {
-                        "type": "report_bound",
-                        "report_id": (
-                            str(conversation.report_id)
-                            if conversation.report_id
-                            else None
-                        ),
-                    }
-                )
-                continue
             if mtype == "stop":
                 stop_event.set()
                 continue
@@ -135,7 +108,12 @@ async def ws_chat(
                     continue
                 stop_event.clear()
                 await _handle_message(
-                    websocket, conversation, content, tenant_id, stop_event, user_id
+                    websocket,
+                    conversation,
+                    content,
+                    tenant_id,
+                    stop_event,
+                    user_id,
                 )
                 continue
             await _send_error(websocket, f"unknown message type: {mtype}")
@@ -149,7 +127,6 @@ async def _init_or_restore_conversation(
     ws: WebSocket, user_id: str, tenant_id: str, msg: dict[str, Any]
 ) -> Conversation | None:
     conv_id = msg.get("conversation_id")
-    report_id = msg.get("report_id")
     async with SessionLocal() as s:
         conv: Conversation | None = None
         if conv_id:
@@ -158,15 +135,9 @@ async def _init_or_restore_conversation(
                 await _send_error(ws, "conversation not found")
                 return None
         else:
-            r_id = None
-            if report_id:
-                rep = await s.get(Report, _uuid(report_id))
-                if rep and str(rep.tenant_id) == tenant_id:
-                    r_id = rep.id
             conv = Conversation(
                 tenant_id=_uuid(tenant_id),
                 user_id=_uuid(user_id),
-                report_id=r_id,
                 title="新对话",
             )
             s.add(conv)
@@ -176,10 +147,24 @@ async def _init_or_restore_conversation(
         {
             "type": "connected",
             "session_id": str(conv.id),
-            "report_id": str(conv.report_id) if conv.report_id else None,
+            "report_ids": _conv_report_ids(conv),
+            "dataset_ids": _conv_dataset_ids(conv),
         }
     )
     return conv
+
+
+def _conv_dataset_ids(conv: Conversation) -> list[str]:
+    raw = conv.dataset_ids or []
+    return [str(x) for x in raw if x]
+
+
+def _conv_report_ids(conv: Conversation) -> list[str]:
+    raw = conv.report_ids or []
+    ids = [str(x) for x in raw if x]
+    if not ids and conv.report_id:
+        ids = [str(conv.report_id)]
+    return ids
 
 
 async def _handle_message(
@@ -190,6 +175,11 @@ async def _handle_message(
     stop_event: asyncio.Event,
     user_id: str | None = None,
 ) -> None:
+    async with SessionLocal() as s:
+        fresh = await s.get(Conversation, conv.id)
+        if fresh:
+            conv = fresh
+
     user_msg = Message(
         conversation_id=conv.id,
         role="user",
@@ -201,21 +191,33 @@ async def _handle_message(
         await s.refresh(user_msg)
         history_rows = await _load_history(s, conv.id, HISTORY_TURNS)
 
+    dataset_ids = _conv_dataset_ids(conv)
+    report_ids = _conv_report_ids(conv)
+    has_rag = bool(dataset_ids) or bool(report_ids)
+
     await ws.send_json({"type": "status", "content": "思考中..."})
     citations = await _gather_citations(
-        user_content, tenant_id, conv.report_id, user_id
+        user_content, tenant_id, report_ids, user_id, dataset_ids
     )
     report_context = (
-        await _load_report_context(conv.report_id, tenant_id) if conv.report_id else ""
+        await _load_reports_context(report_ids, tenant_id) if report_ids else ""
     )
 
     history_msgs = _format_history(history_rows)
-    sys_prompt = _system_prompt(conv.report_id is not None)
-    context_block = _context_block(citations, report_context)
+    if has_rag:
+        sys_prompt = _system_prompt(bool(report_ids), rag_mode=True)
+        context_block = _context_block(citations, report_context)
+        user_payload = (
+            f"{user_content}\n\n{context_block}" if context_block else user_content
+        )
+    else:
+        sys_prompt = _system_prompt(False, rag_mode=False)
+        user_payload = user_content
+
     messages = [
         {"role": "system", "content": sys_prompt},
         *history_msgs,
-        {"role": "user", "content": f"{user_content}\n\n{context_block}"},
+        {"role": "user", "content": user_payload},
     ]
 
     await ws.send_json({"type": "status", "content": "生成中..."})
@@ -238,7 +240,10 @@ async def _handle_message(
         return
 
     sug_prompt = [
-        {"role": "system", "content": "你是一个法律问答助手。根据用户的问题和助手的回答，生成3个用户可能追问的简短问题。用分号分隔，只输出问题内容，不要有前缀标记。"},
+        {
+            "role": "system",
+            "content": "你是一个法律问答助手。根据用户的问题和助手的回答，生成3个用户可能追问的简短问题。用分号分隔，只输出问题内容，不要有前缀标记。",
+        },
         {"role": "user", "content": f"用户问题：{user_content}\n\n助手回答：{answer}"},
     ]
     try:
@@ -295,29 +300,47 @@ async def _handle_message(
 
 
 async def _gather_citations(
-    query: str, tenant_id: str, report_id: uuid.UUID | None, user_id: str | None = None
+    query: str,
+    tenant_id: str,
+    report_ids: list[str],
+    user_id: str | None = None,
+    dataset_ids: list[str] | None = None,
 ) -> list[Citation]:
     out: list[Citation] = []
+    ids = [d for d in (dataset_ids or []) if d]
+    rids = [r for r in (report_ids or []) if r]
 
-    if report_id and user_id:
-        for dt in ("contract", "dispute"):
-            user_hits = await retrieve_children(
-                query=query, tenant_id=tenant_id, doc_type=dt, top_k=3, user_id=user_id
-            )
-            for h in user_hits:
-                if h.get("score", 0) < MIN_RETRIEVAL_SCORE:
-                    continue
-                out.append(
-                    Citation(
-                        chunk_id=h.get("chunk_id"),
-                        document_id=h.get("document_id"),
-                        source_type="user_doc",
-                        source_title=h.get("source") or "用户材料",
-                        excerpt=(h.get("text") or "")[:280],
-                        page=h.get("page"),
-                        score=h.get("score"),
-                    )
+    if not ids and not rids:
+        return []
+
+    for ds_id in ids:
+        hits = await retrieve_children(
+            query=query,
+            tenant_id=tenant_id,
+            dataset_id=ds_id,
+            top_k=TOP_K_RETRIEVAL,
+            user_id=user_id,
+        )
+        for h in hits:
+            if h.get("score", 0) < MIN_RETRIEVAL_SCORE:
+                continue
+            dt = h.get("doc_type") or "user_doc"
+            st = "law" if dt == "law" else "case" if dt == "case" else "user_doc"
+            if dt == "compliance":
+                st = "compliance"
+            out.append(
+                Citation(
+                    chunk_id=h.get("chunk_id"),
+                    document_id=h.get("document_id"),
+                    source_type=st,
+                    source_title=h.get("source") or "知识库",
+                    excerpt=(h.get("text") or "")[:280],
+                    page=h.get("page"),
+                    score=h.get("score"),
                 )
+            )
+
+    if rids and user_id:
         report_hits = await retrieve_children(
             query=query,
             tenant_id=tenant_id,
@@ -340,29 +363,6 @@ async def _gather_citations(
                 )
             )
 
-    for doc_type, st in (("law", "law"), ("case", "case")):
-        hits = await retrieve_children(
-            query=query,
-            tenant_id=tenant_id,
-            doc_type=doc_type,
-            top_k=TOP_K_RETRIEVAL // 2,
-        )
-        for h in hits:
-            if h.get("score", 0) < MIN_RETRIEVAL_SCORE:
-                continue
-            out.append(
-                Citation(
-                    chunk_id=h.get("chunk_id"),
-                    document_id=h.get("document_id"),
-                    source_type=st,
-                    source_title=h.get("source")
-                    or f"{st}:{h.get('law_name') or ''}".strip(":"),
-                    excerpt=(h.get("text") or "")[:280],
-                    page=h.get("page"),
-                    score=h.get("score"),
-                )
-            )
-
     seen: set[str] = set()
     deduped: list[Citation] = []
     for c in out:
@@ -374,9 +374,16 @@ async def _gather_citations(
     return deduped[:10]
 
 
-async def _load_report_context(report_id: uuid.UUID | None, tenant_id: str) -> str:
-    if not report_id:
-        return ""
+async def _load_reports_context(report_ids: list[str], tenant_id: str) -> str:
+    parts: list[str] = []
+    for rid in report_ids:
+        ctx = await _load_report_context(_uuid(rid), tenant_id)
+        if ctx:
+            parts.append(ctx)
+    return "\n\n".join(parts)
+
+
+async def _load_report_context(report_id: uuid.UUID, tenant_id: str) -> str:
     async with SessionLocal() as s:
         r = await s.get(Report, report_id)
         if not r or str(r.tenant_id) != tenant_id:
@@ -414,11 +421,13 @@ def _format_history(rows: list[Message]) -> list[dict[str, str]]:
     return out
 
 
-def _system_prompt(bound_report: bool) -> str:
-    base = "你是枫桥智诉智能助手，帮助用户解答法律相关问题。请依据提供的参考来源回答，标注引用编号如[C1]、[C2]。"
-    if bound_report:
-        base += "当前会话绑定了一份用户报告，优先结合报告内容回答。"
-    return base
+def _system_prompt(bound_report: bool, *, rag_mode: bool = True) -> str:
+    if rag_mode:
+        base = "你是枫桥智诉智能助手，帮助用户解答法律相关问题。请依据提供的参考来源回答，标注引用编号如[C1]、[C2]。"
+        if bound_report:
+            base += "当前会话绑定了用户报告，优先结合报告内容回答。"
+        return base
+    return "你是枫桥智诉智能助手，帮助用户解答法律相关问题。请用清晰、专业的语言直接回答用户问题。"
 
 
 def _context_block(citations: list[Citation], report_context: str) -> str:
@@ -450,7 +459,7 @@ def _extract_meta(answer: str) -> tuple[list[str], int | None, str]:
             for q in re.split(r"[;；]", raw_qs)
             if q.strip()
         ][:3]
-        body = answer[:sug_match.start()].strip()
+        body = answer[: sug_match.start()].strip()
 
     conf_match = re.search(r"^置信度[:：].+$", body, re.MULTILINE)
     if conf_match:
@@ -460,7 +469,7 @@ def _extract_meta(answer: str) -> tuple[list[str], int | None, str]:
                 confidence = max(0, min(100, int(conf_num.group(0))))
         except (ValueError, AttributeError):
             pass
-        body = body[:conf_match.start()].strip()
+        body = body[: conf_match.start()].strip()
 
     return suggested, confidence, body
 

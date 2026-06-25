@@ -23,7 +23,9 @@ async def search(payload: SearchQuery, user: CurrentUserDep):
     )
     graph_ctx = []
     if payload.use_graph:
-        graph_ctx = await _graph_context(payload.query, user.tenant_id, payload.dataset_id)
+        graph_ctx = await _graph_context(
+            payload.query, user.tenant_id, payload.dataset_id
+        )
     return SearchResult(
         query=payload.query,
         hits=[SearchHit(**h) for h in hits],
@@ -44,12 +46,19 @@ async def answer(payload: SearchQuery, user: CurrentUserDep):
 
     context_blocks = [h["text"] for h in hits[:6]]
     if graph_ctx:
-        graph_strs = [f"{g['name']}({g.get('type','')})" for g in graph_ctx[:5] if isinstance(g, dict)]
+        graph_strs = [
+            f"{g['name']}({g.get('type','')})"
+            for g in graph_ctx[:5]
+            if isinstance(g, dict)
+        ]
         context_blocks.append("知识图谱关联实体：" + " | ".join(graph_strs))
     context = "\n\n".join(context_blocks) or "（无相关上下文）"
 
     messages = [
-        {"role": "system", "content": "你是知识库问答助手。严格依据上下文作答，并标注来源；若上下文不足请明确说明。"},
+        {
+            "role": "system",
+            "content": "你是知识库问答助手。严格依据上下文作答，并标注来源；若上下文不足请明确说明。",
+        },
         {"role": "user", "content": f"问题：{payload.query}\n\n上下文：\n{context}"},
     ]
     try:
@@ -85,12 +94,19 @@ async def answer_stream(payload: SearchQuery, user: CurrentUserDep):
 
     context_blocks = [h["text"] for h in hits[:6]]
     if graph_ctx:
-        graph_strs = [f"{g['name']}({g.get('type','')})" for g in graph_ctx[:5] if isinstance(g, dict)]
+        graph_strs = [
+            f"{g['name']}({g.get('type','')})"
+            for g in graph_ctx[:5]
+            if isinstance(g, dict)
+        ]
         context_blocks.append("知识图谱关联实体：" + " | ".join(graph_strs))
     context = "\n\n".join(context_blocks) or "（无相关上下文）"
 
     messages = [
-        {"role": "system", "content": "你是知识库问答助手。严格依据上下文作答，并标注来源；若上下文不足请明确说明。"},
+        {
+            "role": "system",
+            "content": "你是知识库问答助手。严格依据上下文作答，并标注来源；若上下文不足请明确说明。",
+        },
         {"role": "user", "content": f"问题：{payload.query}\n\n上下文：\n{context}"},
     ]
 
@@ -119,8 +135,18 @@ async def answer_stream(payload: SearchQuery, user: CurrentUserDep):
 
 async def _graph_context(query: str, tenant_id: str, dataset_id) -> list[dict]:
     try:
-        res = await resolve_graph_entities(query, tenant_id, depth=2, limit=20)
+        ds = str(dataset_id) if dataset_id else None
+        res = await resolve_graph_entities(
+            query, tenant_id, depth=2, limit=20, dataset_id=ds
+        )
     except Exception:
         return []
     entities = res.get("entities", []) if res else []
-    return [{"name": e.get("name"), "type": e.get("type"), "description": e.get("description")} for e in entities]
+    return [
+        {
+            "name": e.get("name"),
+            "type": e.get("type"),
+            "description": e.get("description"),
+        }
+        for e in entities
+    ]

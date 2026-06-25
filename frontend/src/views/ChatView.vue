@@ -1,229 +1,312 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { ChatDotRound, Close, Document, Plus } from '@element-plus/icons-vue'
-import { deleteConversation, listConversations } from '@/api/conversations'
-import { listReports } from '@/api/reports'
-import { useConversationStore } from '@/stores/conversation'
-import type { ConversationSummary, Report, SourceType } from '@/types'
-import { marked } from 'marked'
+import { nextTick, onMounted, onUnmounted, ref, watch, computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ElMessage, ElMessageBox } from "element-plus";
+import {
+  ChatDotRound,
+  Document,
+  MoreFilled,
+  Plus,
+} from "@element-plus/icons-vue";
+import { deleteConversation, listConversations } from "@/api/conversations";
+import { listReports } from "@/api/reports";
+import { useConversationStore } from "@/stores/conversation";
+import { useKnowledgeContextStore } from "@/stores/knowledgeContext";
+import { docTypeLabel } from "@/constants/docTypes";
+import type { ConversationSummary, Report, SourceType } from "@/types";
+import { marked } from "marked";
 
 marked.setOptions({
   breaks: true,
   gfm: true,
-})
+});
 
-const route = useRoute()
-const router = useRouter()
-const store = useConversationStore()
+const route = useRoute();
+const router = useRouter();
+const store = useConversationStore();
+const kb = useKnowledgeContextStore();
 
-const inputText = ref('')
-const reportOptions = ref<Report[]>([])
-const conversations = ref<ConversationSummary[]>([])
-const scrollContainer = ref<HTMLDivElement | null>(null)
+const inputText = ref("");
+const reportOptions = ref<Report[]>([]);
+const conversations = ref<ConversationSummary[]>([]);
+const scrollContainer = ref<HTMLDivElement | null>(null);
+const convDialogVisible = ref(false);
+const convDialogMode = ref<"new" | "edit">("new");
+const editingConvId = ref<string | null>(null);
+const convFormTitle = ref("");
+const convFormDatasetIds = ref<string[]>([]);
+const convFormReportIds = ref<string[]>([]);
 
 const groupedConversations = computed(() => {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const todayConvs: ConversationSummary[] = []
-  const weekConvs: ConversationSummary[] = []
-  const monthConvs: ConversationSummary[] = []
-  const olderConvs: ConversationSummary[] = []
+  const todayConvs: ConversationSummary[] = [];
+  const weekConvs: ConversationSummary[] = [];
+  const monthConvs: ConversationSummary[] = [];
+  const olderConvs: ConversationSummary[] = [];
 
   for (const conv of conversations.value) {
-    const convDate = new Date(conv.updated_at)
+    const convDate = new Date(conv.updated_at);
     if (convDate >= today) {
-      todayConvs.push(conv)
+      todayConvs.push(conv);
     } else if (convDate >= weekAgo) {
-      weekConvs.push(conv)
+      weekConvs.push(conv);
     } else if (convDate >= monthAgo) {
-      monthConvs.push(conv)
+      monthConvs.push(conv);
     } else {
-      olderConvs.push(conv)
+      olderConvs.push(conv);
     }
   }
 
   return [
-    { label: '今日', conversations: todayConvs },
-    { label: '七日内', conversations: weekConvs },
-    { label: '一个月内', conversations: monthConvs },
-    { label: '更早', conversations: olderConvs },
-  ].filter(g => g.conversations.length > 0)
-})
+    { label: "今日", conversations: todayConvs },
+    { label: "七日内", conversations: weekConvs },
+    { label: "一个月内", conversations: monthConvs },
+    { label: "更早", conversations: olderConvs },
+  ].filter((g) => g.conversations.length > 0);
+});
 
 function renderMarkdown(content: string): string {
-  return marked.parse(content) as string
+  return marked.parse(content) as string;
 }
 
-const sourceTagType: Record<SourceType, 'success' | 'warning' | 'info' | 'primary' | 'danger'> = {
-  law: 'primary',
-  case: 'success',
-  report: 'warning',
-  user_doc: 'info',
-  compliance: 'primary',
-  graph: 'danger',
-}
+const sourceTagType: Record<
+  SourceType,
+  "success" | "warning" | "info" | "primary" | "danger"
+> = {
+  law: "primary",
+  case: "success",
+  report: "warning",
+  user_doc: "info",
+  compliance: "primary",
+  graph: "danger",
+};
 
 const sourceTagText: Record<SourceType, string> = {
-  law: '法规',
-  case: '类案',
-  report: '报告',
-  user_doc: '材料',
-  compliance: '合规',
-  graph: '图谱',
-}
-
-const boundReport = ref<Report | null>(null)
+  law: "法规",
+  case: "类案",
+  report: "报告",
+  user_doc: "材料",
+  compliance: "合规",
+  graph: "图谱",
+};
 
 async function loadConversations() {
   try {
-    conversations.value = await listConversations()
+    conversations.value = await listConversations();
   } catch {
-    conversations.value = []
+    conversations.value = [];
   }
 }
 
 async function loadReportOptions() {
   try {
-    reportOptions.value = await listReports()
+    reportOptions.value = await listReports();
   } catch {
-    reportOptions.value = []
+    reportOptions.value = [];
   }
-}
-
-async function refreshBoundReport() {
-  if (!store.boundReportId) {
-    boundReport.value = null
-    return
-  }
-  boundReport.value = reportOptions.value.find((x) => x.id === store.boundReportId) || null
 }
 
 async function ensureSession() {
-  const conversationId = route.params.conversationId as string | undefined
-  const reportIdFromQuery = route.query.report_id as string | undefined
+  const conversationId = route.params.conversationId as string | undefined;
   if (!store.isConnected) {
     try {
       if (conversationId) {
-        await store.initConversation({
-          conversationId,
-          reportId: reportIdFromQuery,
-        })
+        await store.initConversation({ conversationId });
       }
     } catch (e) {
-      ElMessage.error(e instanceof Error ? e.message : '会话连接失败')
+      ElMessage.error(e instanceof Error ? e.message : "会话连接失败");
     }
   }
-  await refreshBoundReport()
+}
+
+function resetConvForm() {
+  convFormTitle.value = "";
+  convFormDatasetIds.value = [];
+  convFormReportIds.value = [];
+  editingConvId.value = null;
+}
+
+function openNewConversationDialog() {
+  const reportIdFromQuery = route.query.report_id as string | undefined;
+  convDialogMode.value = "new";
+  resetConvForm();
+  if (reportIdFromQuery) {
+    convFormReportIds.value = [reportIdFromQuery];
+  }
+  convDialogVisible.value = true;
+}
+
+function openEditConversationDialog(conv: ConversationSummary) {
+  convDialogMode.value = "edit";
+  editingConvId.value = conv.id;
+  convFormTitle.value = conv.title;
+  convFormDatasetIds.value = [...(conv.dataset_ids || [])];
+  convFormReportIds.value = [
+    ...(conv.report_ids || (conv.report_id ? [conv.report_id] : [])),
+  ];
+  convDialogVisible.value = true;
+}
+
+async function submitConvDialog() {
+  try {
+    if (convDialogMode.value === "new") {
+      const conv = await store.createConversationAndSet({
+        reportIds: convFormReportIds.value,
+        datasetIds: convFormDatasetIds.value,
+        title: convFormTitle.value.trim() || "新对话",
+      });
+      const summary: ConversationSummary = {
+        id: conv.id,
+        title: conv.title,
+        report_id: conv.report_id,
+        report_ids: conv.report_ids || [],
+        dataset_ids: conv.dataset_ids || [],
+        track: conv.track,
+        message_count: 0,
+        enable_thinking: conv.enable_thinking,
+        created_at: conv.created_at,
+        updated_at: conv.updated_at,
+      };
+      conversations.value.unshift(summary);
+      convDialogVisible.value = false;
+      router.push({
+        name: "chat-with-conversation",
+        params: { conversationId: conv.id },
+      });
+    } else if (editingConvId.value) {
+      const updated = await store.updateConversationSettings(
+        editingConvId.value,
+        {
+          title: convFormTitle.value.trim() || "新对话",
+          report_ids: convFormReportIds.value,
+          dataset_ids: convFormDatasetIds.value,
+        },
+      );
+      const idx = conversations.value.findIndex(
+        (c) => c.id === editingConvId.value,
+      );
+      if (idx >= 0) {
+        conversations.value[idx] = {
+          ...conversations.value[idx],
+          title: updated.title,
+          report_id: updated.report_id,
+          report_ids: updated.report_ids || [],
+          dataset_ids: updated.dataset_ids || [],
+          updated_at: updated.updated_at,
+        };
+      }
+      convDialogVisible.value = false;
+      ElMessage.success("已保存");
+    }
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : "操作失败");
+  }
 }
 
 async function startNewConversation() {
-  try {
-    const reportIdFromQuery = route.query.report_id as string | undefined
-    const conv = await store.createConversationAndSet({ reportId: reportIdFromQuery })
-    const summary: ConversationSummary = {
-      id: conv.id,
-      title: conv.title,
-      report_id: conv.report_id,
-      track: conv.track,
-      message_count: 0,
-      enable_thinking: conv.enable_thinking,
-      created_at: conv.created_at,
-      updated_at: conv.updated_at,
-    }
-    conversations.value.unshift(summary)
-    router.push({ name: 'chat-with-conversation', params: { conversationId: conv.id } })
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '创建会话失败')
-  }
+  openNewConversationDialog();
 }
 
 async function switchConversation(conv: ConversationSummary) {
-  router.push({ name: 'chat-with-conversation', params: { conversationId: conv.id } })
+  router.push({
+    name: "chat-with-conversation",
+    params: { conversationId: conv.id },
+  });
   try {
-    await store.initConversation({ conversationId: conv.id })
+    await store.initConversation({ conversationId: conv.id });
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '切换会话失败')
+    ElMessage.error(e instanceof Error ? e.message : "切换会话失败");
   }
 }
 
-async function removeConversation(conv: ConversationSummary, event: Event) {
-  event.stopPropagation()
+async function removeConversation(conv: ConversationSummary) {
   try {
-    await ElMessageBox.confirm(`确认删除会话「${conv.title}」？`, '删除会话', { type: 'warning' })
+    await ElMessageBox.confirm(`确认删除会话「${conv.title}」？`, "删除会话", {
+      type: "warning",
+    });
   } catch {
-    return
+    return;
   }
   try {
-    await deleteConversation(conv.id)
+    await deleteConversation(conv.id);
     if (store.currentConversation?.id === conv.id) {
-      store.disconnect()
-      router.push({ name: 'chat' })
-      await store.initConversation({})
+      store.disconnect();
+      router.push({ name: "chat" });
+      store.clearCurrentConversation();
     }
-    await loadConversations()
-    ElMessage.success('已删除')
+    await loadConversations();
+    ElMessage.success("已删除");
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '删除失败')
+    ElMessage.error(e instanceof Error ? e.message : "删除失败");
   }
 }
 
 async function send() {
-  const text = inputText.value.trim()
-  if (!text) return
+  const text = inputText.value.trim();
+  if (!text) return;
   if (!store.isConnected) {
-    const reportIdFromQuery = route.query.report_id as string | undefined
-    if (!store.currentConversation) {
-      await store.initConversation({ reportId: reportIdFromQuery })
-    } else {
-      await store.initConversation({ conversationId: store.currentConversation.id })
+    if (!store.currentConversation && route.params.conversationId) {
+      await store.initConversation({
+        conversationId: route.params.conversationId as string,
+      });
+    } else if (store.currentConversation) {
+      await store.initConversation({
+        conversationId: store.currentConversation.id,
+      });
     }
-    if (!store.isConnected) return
+    if (!store.isConnected) return;
   }
-  inputText.value = ''
-  await store.sendMessage(text)
-  await scrollToBottom()
-  await loadConversations()
+  inputText.value = "";
+  await store.sendMessage(text);
+  await scrollToBottom();
+  await loadConversations();
 }
 
 function pickSuggested(q: string) {
-  inputText.value = q
-  send()
-}
-
-async function onChangeReport(reportId: string | null) {
-  store.bindReport(reportId)
-  await refreshBoundReport()
+  inputText.value = q;
+  send();
 }
 
 async function scrollToBottom() {
-  await nextTick()
+  await nextTick();
   if (scrollContainer.value) {
-    scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+    scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
   }
 }
 
-watch(() => store.streamingMessage, () => scrollToBottom())
-watch(() => store.messages.length, () => scrollToBottom())
-watch(() => store.boundReportId, () => refreshBoundReport())
-watch(() => route.params.conversationId, async (newId, oldId) => {
-  if (newId !== oldId && !store.isStreaming) {
-    await ensureSession()
-  }
-})
+watch(
+  () => store.streamingMessage,
+  () => scrollToBottom(),
+);
+watch(
+  () => store.messages.length,
+  () => scrollToBottom(),
+);
+watch(
+  () => route.params.conversationId,
+  async (newId, oldId) => {
+    if (newId !== oldId && !store.isStreaming) {
+      await ensureSession();
+    }
+  },
+);
 
 onMounted(async () => {
-  await Promise.all([loadConversations(), loadReportOptions()])
-  await ensureSession()
-})
+  await Promise.all([
+    loadConversations(),
+    loadReportOptions(),
+    kb.loadDatasets(),
+  ]);
+  await ensureSession();
+});
 
 onUnmounted(() => {
-  store.disconnect()
-})
+  store.disconnect();
+});
 </script>
 
 <template>
@@ -234,12 +317,21 @@ onUnmounted(() => {
           <el-icon><ChatDotRound /></el-icon>
           会话
         </span>
-        <el-button type="primary" size="small" :icon="Plus" @click="startNewConversation">
+        <el-button
+          type="primary"
+          size="small"
+          :icon="Plus"
+          @click="startNewConversation"
+        >
           新建
         </el-button>
       </div>
       <div class="conv-list">
-        <el-empty v-if="!conversations.length" :image-size="60" description="暂无会话" />
+        <el-empty
+          v-if="!conversations.length"
+          :image-size="60"
+          description="暂无会话"
+        />
         <template v-else>
           <div v-for="group in groupedConversations" :key="group.label">
             <div class="conv-group-label">{{ group.label }}</div>
@@ -252,15 +344,51 @@ onUnmounted(() => {
             >
               <div class="conv-item-title">{{ conv.title }}</div>
               <div class="conv-item-meta">
-                <span>{{ new Date(conv.updated_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</span>
-                <span v-if="conv.message_count" class="msg-count">{{ conv.message_count }} 条</span>
-                <el-icon v-if="conv.report_id" class="bound-icon" title="已绑定报告">
+                <span>{{
+                  new Date(conv.updated_at).toLocaleString("zh-CN", {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                }}</span>
+                <span v-if="conv.message_count" class="msg-count"
+                  >{{ conv.message_count }} 条</span
+                >
+                <span v-if="conv.dataset_ids?.length" class="ds-count"
+                  >{{ conv.dataset_ids.length }} 库</span
+                >
+                <span
+                  v-if="conv.report_ids?.length || conv.report_id"
+                  class="ds-count"
+                >
+                  {{ conv.report_ids?.length || (conv.report_id ? 1 : 0) }} 报告
+                </span>
+                <el-icon
+                  v-if="conv.report_ids?.length || conv.report_id"
+                  class="bound-icon"
+                  title="已绑定报告"
+                >
                   <Document />
                 </el-icon>
               </div>
-              <el-icon class="del-icon" @click="removeConversation(conv, $event)">
-                <Close />
-              </el-icon>
+              <el-dropdown trigger="click" @click.stop>
+                <el-icon class="more-icon" @click.stop>
+                  <MoreFilled />
+                </el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      @click.stop="openEditConversationDialog(conv)"
+                    >
+                      编辑
+                    </el-dropdown-item>
+                    <el-dropdown-item @click.stop="removeConversation(conv)">
+                      删除
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </div>
         </template>
@@ -268,37 +396,11 @@ onUnmounted(() => {
     </aside>
 
     <div class="chat-main">
-      <div class="chat-toolbar">
-        <div class="toolbar-left">
-          <span class="toolbar-label">绑定报告：</span>
-          <el-select
-            :model-value="store.boundReportId"
-            placeholder="不绑定（通用问答）"
-            clearable
-            size="small"
-            style="width: 280px"
-            @change="onChangeReport"
-          >
-            <el-option
-              v-for="r in reportOptions"
-              :key="r.id"
-              :label="`${r.type} · ${(r.summary || r.id.slice(0, 8)).slice(0, 30)}`"
-              :value="r.id"
-            />
-          </el-select>
-          <el-tag v-if="store.isConnected" type="success" size="small">已连接</el-tag>
-          <el-tag v-else type="info" size="small">未连接</el-tag>
-        </div>
-        <div v-if="boundReport" class="report-banner">
-          <el-tag type="warning" size="small">
-            报告 {{ boundReport.confidence }}%
-          </el-tag>
-          <span class="report-banner-text">{{ boundReport.summary?.slice(0, 50) || boundReport.type }}</span>
-        </div>
-      </div>
-
       <div ref="scrollContainer" class="messages">
-        <el-empty v-if="!store.messages.length && !store.streamingMessage" description="开始提问吧，例如：合同第2条风险怎么改？" />
+        <el-empty
+          v-if="!store.messages.length && !store.streamingMessage"
+          description="开始提问吧，例如：合同第2条风险怎么改？"
+        />
 
         <div
           v-for="m in store.messages"
@@ -307,7 +409,10 @@ onUnmounted(() => {
           :class="m.role"
         >
           <div class="bubble">
-            <div class="markdown-content" v-html="renderMarkdown(m.content)"></div>
+            <div
+              class="markdown-content"
+              v-html="renderMarkdown(m.content)"
+            ></div>
             <div v-if="m.role === 'assistant'" class="msg-meta">
               <div v-if="m.citations.length" class="citations">
                 <el-collapse>
@@ -318,12 +423,17 @@ onUnmounted(() => {
                       class="source-item"
                     >
                       <div class="source-title">
-                        <el-tag :type="sourceTagType[c.source_type]" size="small">
+                        <el-tag
+                          :type="sourceTagType[c.source_type]"
+                          size="small"
+                        >
                           {{ sourceTagText[c.source_type] }}
                         </el-tag>
                         <span class="title-text">{{ c.source_title }}</span>
                       </div>
-                      <pre v-if="c.excerpt" class="text-pre excerpt">{{ c.excerpt }}</pre>
+                      <pre v-if="c.excerpt" class="text-pre excerpt">{{
+                        c.excerpt
+                      }}</pre>
                     </div>
                   </el-collapse-item>
                 </el-collapse>
@@ -343,7 +453,10 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-if="store.statusMessage && !store.streamingMessage" class="msg-row assistant">
+        <div
+          v-if="store.statusMessage && !store.streamingMessage"
+          class="msg-row assistant"
+        >
           <div class="bubble status">
             <div class="thinking-indicator">
               <span class="dot"></span>
@@ -356,7 +469,10 @@ onUnmounted(() => {
 
         <div v-if="store.streamingMessage" class="msg-row assistant">
           <div class="bubble streaming">
-            <div class="markdown-content" v-html="renderMarkdown(store.streamingMessage)"></div>
+            <div
+              class="markdown-content"
+              v-html="renderMarkdown(store.streamingMessage)"
+            ></div>
             <span class="cursor">▍</span>
           </div>
         </div>
@@ -380,12 +496,101 @@ onUnmounted(() => {
           >
             停止生成
           </el-button>
-          <el-button v-else type="primary" :disabled="!inputText.trim()" @click="send">
+          <el-button
+            v-else
+            type="primary"
+            :disabled="!inputText.trim()"
+            @click="send"
+          >
             发送
           </el-button>
         </div>
       </div>
     </div>
+
+    <el-dialog
+      v-model="convDialogVisible"
+      :title="convDialogMode === 'new' ? '新建会话' : '编辑会话'"
+      width="480px"
+      destroy-on-close
+    >
+      <el-form label-width="120px" label-position="top">
+        <el-form-item v-if="convDialogMode === 'edit'" label="会话标题">
+          <el-input
+            v-model="convFormTitle"
+            placeholder="会话标题"
+            maxlength="100"
+          />
+        </el-form-item>
+        <el-form-item label="绑定知识库（可选，可多选）">
+          <el-select
+            v-model="convFormDatasetIds"
+            multiple
+            clearable
+            filterable
+            placeholder="不选择则直接与大模型对话"
+            :loading="kb.loading"
+            style="width: 100%"
+          >
+            <el-option-group v-if="kb.userDatasets.length" label="私有知识库">
+              <el-option
+                v-for="ds in kb.userDatasets"
+                :key="ds.id"
+                :label="ds.name"
+                :value="ds.id"
+              >
+                <span>{{ ds.name }}</span>
+                <span class="opt-meta">{{
+                  docTypeLabel(String(ds.metadata?.doc_type || ""))
+                }}</span>
+              </el-option>
+            </el-option-group>
+            <el-option-group
+              v-if="kb.platformDatasets.length"
+              label="平台公共库"
+            >
+              <el-option
+                v-for="ds in kb.platformDatasets"
+                :key="ds.id"
+                :label="ds.name"
+                :value="ds.id"
+              >
+                <span>{{ ds.name }}</span>
+                <span class="opt-meta">{{
+                  docTypeLabel(String(ds.metadata?.doc_type || ""))
+                }}</span>
+              </el-option>
+            </el-option-group>
+          </el-select>
+          <p class="form-hint">
+            不选择知识库时不会进行文档召回，直接与 AI 对话
+          </p>
+        </el-form-item>
+        <el-form-item label="绑定报告（可选，可多选）">
+          <el-select
+            v-model="convFormReportIds"
+            multiple
+            clearable
+            filterable
+            placeholder="不绑定报告"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="r in reportOptions"
+              :key="r.id"
+              :label="`${r.type} · ${(r.summary || r.id.slice(0, 8)).slice(0, 30)}`"
+              :value="r.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="convDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitConvDialog">
+          {{ convDialogMode === "new" ? "创建" : "保存" }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -502,22 +707,24 @@ onUnmounted(() => {
   color: #f97316;
 }
 
-.del-icon {
+.more-icon {
   position: absolute;
   top: 10px;
   right: 8px;
-  font-size: 14px;
-  color: #cbd5e1;
+  font-size: 16px;
+  color: #94a3b8;
   opacity: 0;
   transition: all 0.15s;
+  cursor: pointer;
+  transform: rotate(90deg);
 }
 
-.conv-item:hover .del-icon {
+.conv-item:hover .more-icon {
   opacity: 1;
 }
 
-.del-icon:hover {
-  color: #ef4444;
+.more-icon:hover {
+  color: #64748b;
 }
 
 .chat-main {
@@ -545,6 +752,35 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bound-datasets {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bound-datasets .scope-icon {
+  color: var(--brand-primary);
+  font-size: 16px;
+}
+
+.ds-count {
+  color: #64748b;
+}
+
+.form-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.opt-meta {
+  float: right;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .toolbar-label {
@@ -590,8 +826,14 @@ onUnmounted(() => {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .msg-row.user {
@@ -619,7 +861,7 @@ onUnmounted(() => {
 }
 
 .msg-row.user .bubble::after {
-  content: '';
+  content: "";
   position: absolute;
   right: -5px;
   bottom: 6px;
@@ -799,7 +1041,8 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
-.markdown-content ul, .markdown-content ol {
+.markdown-content ul,
+.markdown-content ol {
   margin: 6px 0;
   padding-left: 18px;
 }
@@ -814,7 +1057,7 @@ onUnmounted(() => {
   color: #92400e;
   padding: 3px 8px;
   border-radius: 6px;
-  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-family: "JetBrains Mono", "Consolas", monospace;
   font-size: 13px;
   border: 1px solid #fde68a;
 }
@@ -837,15 +1080,26 @@ onUnmounted(() => {
   border: none;
 }
 
-.markdown-content h1, .markdown-content h2, .markdown-content h3 {
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
   margin: 20px 0 12px 0;
   font-weight: 700;
   color: #1e293b;
 }
 
-.markdown-content h1 { font-size: 22px; border-bottom: 2px solid #f97316; padding-bottom: 8px; }
-.markdown-content h2 { font-size: 18px; color: #334155; }
-.markdown-content h3 { font-size: 16px; }
+.markdown-content h1 {
+  font-size: 22px;
+  border-bottom: 2px solid #f97316;
+  padding-bottom: 8px;
+}
+.markdown-content h2 {
+  font-size: 18px;
+  color: #334155;
+}
+.markdown-content h3 {
+  font-size: 16px;
+}
 
 .markdown-content a {
   color: #2563eb;
@@ -877,7 +1131,8 @@ onUnmounted(() => {
   border: 1px solid #e2e8f0;
 }
 
-.markdown-content th, .markdown-content td {
+.markdown-content th,
+.markdown-content td {
   border: 1px solid #cbd5e1;
   padding: 12px 16px;
   text-align: left;
@@ -943,13 +1198,25 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.status .dot:nth-child(1) { animation-delay: -0.32s; }
-.status .dot:nth-child(2) { animation-delay: -0.16s; }
-.status .dot:nth-child(3) { animation-delay: 0s; }
+.status .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+.status .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+.status .dot:nth-child(3) {
+  animation-delay: 0s;
+}
 
 @keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
 }
 
 .status .status-text {
@@ -981,13 +1248,25 @@ onUnmounted(() => {
   animation: loading-bounce 1.4s infinite ease-in-out both;
 }
 
-.loading-dot:nth-child(1) { animation-delay: -0.32s; }
-.loading-dot:nth-child(2) { animation-delay: -0.16s; }
-.loading-dot:nth-child(3) { animation-delay: 0s; }
+.loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+.loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+.loading-dot:nth-child(3) {
+  animation-delay: 0s;
+}
 
 @keyframes loading-bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+  0%,
+  80%,
+  100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
 }
 
 .loading-text {
@@ -997,7 +1276,13 @@ onUnmounted(() => {
 }
 
 @keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
 }
 </style>

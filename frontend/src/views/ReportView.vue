@@ -81,7 +81,7 @@ async function startReportChat() {
   try {
     const conv = await createConversation({
       title: `${reportTypeLabel[store.currentReport.type] || '报告'}问答`,
-      report_id: store.currentReport.id,
+      report_ids: [store.currentReport.id],
     })
     router.push({ name: 'chat-with-conversation', params: { conversationId: conv.id } })
   } catch (e) {

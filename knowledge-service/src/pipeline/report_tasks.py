@@ -37,13 +37,14 @@ def generate_report(
     tenant_id: str,
     user_id: str,
     source_doc_id: str | None = None,
+    source_doc_ids: list[str] | None = None,
     report_type: str = "contract_review",
     text: str | None = None,
     title: str | None = None,
 ) -> str:
     try:
         asyncio.run(_async_generate(
-            report_id, tenant_id, user_id, source_doc_id, report_type, text, title
+            report_id, tenant_id, user_id, source_doc_id, source_doc_ids, report_type, text, title
         ))
         return report_id
     except Exception as e:
@@ -57,6 +58,7 @@ async def _async_generate(
     tenant_id: str,
     user_id: str,
     source_doc_id: str | None,
+    source_doc_ids: list[str] | None,
     report_type: str,
     text: str | None,
     title: str | None,
@@ -75,8 +77,12 @@ async def _async_generate(
         "tenant_id": tenant_id,
         "report_type": report_type,
     }
-    if source_doc_id:
-        skill_params["source_doc_id"] = source_doc_id
+    resolved_ids = list(source_doc_ids or [])
+    if not resolved_ids and source_doc_id:
+        resolved_ids = [source_doc_id]
+    if resolved_ids:
+        skill_params["source_doc_ids"] = resolved_ids
+        skill_params["source_doc_id"] = resolved_ids[0]
     elif text:
         skill_params["text"] = text
 
@@ -89,10 +95,12 @@ async def _async_generate(
         if not r:
             raise RuntimeError(f"report {report_id} vanished during generation")
         r.summary = result["summary"]
-        r.content_json = {
+        content = dict(r.content_json or {})
+        content.update({
             "risk_items": result["risk_items"],
             "graph_path": result["graph_path"],
-        }
+        })
+        r.content_json = content
         r.citations_json = result["citations"]
         r.suggested_questions = result["suggested_questions"]
         r.confidence = result["confidence"]
@@ -142,7 +150,7 @@ def _persist_report_chunks(
                 tenant_id=uuid.UUID(tenant_id),
                 name="用户报告库",
                 description="系统生成的分析报告",
-                metadata_={"scope": "user", "doc_type": REPORT},
+                metadata_={"scope": "user", "doc_type": REPORT, "system": True},
             )
             session.add(ds)
             session.flush()

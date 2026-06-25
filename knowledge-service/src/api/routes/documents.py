@@ -1,48 +1,93 @@
 import hashlib
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload
 
 from api.deps import CurrentUserDep, SessionDep
 from models.base import Dataset, Document
-from ingest.doc_types import DOC_TYPE_LABELS, GENERAL
+from ingest.doc_types import DOC_TYPE_LABELS, GENERAL, SYSTEM_REPORT_DATASET, GENERATED_REPORT_URI_PREFIX
 from pipeline.tasks import build_graph, chunk_and_embed, parse_document, reindex_document
-from schemas.document import DocumentOut
+from schemas.document import DocumentListOut, DocumentListSummary, DocumentOut
 from storage import oss as oss_storage
 
 VALID_DOC_TYPES = set(DOC_TYPE_LABELS.keys())
 USER_DOC_TYPES = {"contract", "dispute", "report"}
+ALLOWED_UPLOAD_SUFFIXES = {".md", ".markdown", ".txt", ".text", ".pdf", ".docx", ".html", ".htm"}
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-@router.get("", response_model=list[DocumentOut])
+@router.get("", response_model=DocumentListOut)
 async def list_documents(
     user: CurrentUserDep,
     session: SessionDep,
     dataset_id: str | None = None,
     status_filter: str | None = None,
     doc_type: str | None = None,
-    limit: int = 100,
+    uploaded_only: bool = Query(default=False, description="仅用户上传文档，排除系统生成的分析报告"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
 ):
-    """List documents for the current tenant, optionally filtered by dataset/status."""
+    """List documents for the current tenant with pagination."""
+    filters = [Dataset.tenant_id == _uuid(user.tenant_id)]
+    if dataset_id:
+        filters.append(Document.dataset_id == _uuid(dataset_id))
+    if status_filter:
+        filters.append(Document.status == status_filter)
+    if doc_type:
+        filters.append(Document.metadata_["doc_type"].astext == doc_type)
+    if uploaded_only:
+        filters.append(Dataset.name != SYSTEM_REPORT_DATASET)
+        filters.append(
+            or_(
+                Document.source_uri.is_(None),
+                ~Document.source_uri.like(f"{GENERATED_REPORT_URI_PREFIX}%"),
+            )
+        )
+
+    count_stmt = (
+        select(func.count())
+        .select_from(Document)
+        .join(Dataset, Document.dataset_id == Dataset.id)
+        .where(*filters)
+    )
+    total = await session.scalar(count_stmt) or 0
+
+    done = await session.scalar(
+        select(func.count())
+        .select_from(Document)
+        .join(Dataset, Document.dataset_id == Dataset.id)
+        .where(*filters, Document.status == "done")
+    ) or 0
+    failed = await session.scalar(
+        select(func.count())
+        .select_from(Document)
+        .join(Dataset, Document.dataset_id == Dataset.id)
+        .where(*filters, Document.status == "failed")
+    ) or 0
+    processing = max(0, int(total) - int(done) - int(failed))
+
     stmt = (
         select(Document)
         .options(joinedload(Document.dataset))
         .join(Dataset, Document.dataset_id == Dataset.id)
-        .where(Dataset.tenant_id == _uuid(user.tenant_id))
+        .where(*filters)
+        .order_by(Document.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
     )
-    if dataset_id:
-        stmt = stmt.where(Document.dataset_id == _uuid(dataset_id))
-    if status_filter:
-        stmt = stmt.where(Document.status == status_filter)
-    if doc_type:
-        stmt = stmt.where(Document.metadata_["doc_type"].astext == doc_type)
-    stmt = stmt.order_by(Document.created_at.desc()).limit(limit)
     res = await session.execute(stmt)
-    return [DocumentOut.model_validate(_as_out(d)) for d in res.scalars().unique().all()]
+    items = [DocumentOut.model_validate(_as_out(d)) for d in res.scalars().unique().all()]
+    return DocumentListOut(
+        items=items,
+        total=int(total),
+        page=page,
+        page_size=page_size,
+        summary=DocumentListSummary(done=int(done), processing=processing, failed=int(failed)),
+    )
 
 
 @router.post("/upload", response_model=DocumentOut, status_code=status.HTTP_201_CREATED)
@@ -62,6 +107,7 @@ async def upload_document(
     raw = await file.read()
     if not raw:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty file")
+    _validate_upload_filename(file.filename)
     content_hash = hashlib.sha256(raw).hexdigest()
 
     existing = await session.execute(
@@ -160,6 +206,16 @@ async def reindex_document_endpoint(document_id: str, user: CurrentUserDep, sess
 
 def _uuid(s: str):
     return uuid.UUID(s)
+
+
+def _validate_upload_filename(filename: str | None) -> None:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_SUFFIXES:
+        allowed = ", ".join(sorted(ALLOWED_UPLOAD_SUFFIXES))
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"unsupported file type '{suffix or '(none)'}'; allowed: {allowed}",
+        )
 
 
 def _as_out(doc: Document) -> dict:

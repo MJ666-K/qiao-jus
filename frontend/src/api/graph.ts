@@ -23,6 +23,7 @@ export async function fetchGraphStats(): Promise<{ entity_count: number }> {
 export async function localGraph(payload: {
   query: string
   depth?: number
+  dataset_id?: string
 }): Promise<GraphQueryResult> {
   const { data } = await apiClient.post<GraphQueryResult>('/graph/local', payload)
   return normalizeGraphResult(data)

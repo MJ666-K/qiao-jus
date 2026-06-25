@@ -80,10 +80,11 @@ def main() -> int:
     section("4. 等待文档处理 (最多 3 分钟)")
     done_count = 0
     for i in range(18):
-        docs = httpx.get(f"{API}/documents", headers=headers, params={"limit": 50}, timeout=15).json()
-        done_count = sum(1 for d in docs if d["status"] == "done")
-        failed = [d for d in docs if d["status"] == "failed"]
-        print(f"  … 轮询 {i+1}: done={done_count}/{len(docs)} failed={len(failed)}")
+        docs = httpx.get(f"{API}/documents", headers=headers, params={"page": 1, "page_size": 50}, timeout=15).json()
+        doc_items = docs.get("items", docs) if isinstance(docs, dict) else docs
+        done_count = sum(1 for d in doc_items if d["status"] == "done")
+        failed = [d for d in doc_items if d["status"] == "failed"]
+        print(f"  … 轮询 {i+1}: done={done_count}/{len(doc_items)} failed={len(failed)}")
         if failed:
             for d in failed[:3]:
                 print(f"     ⚠ {d['title']}: {d.get('error','')[:120]}")

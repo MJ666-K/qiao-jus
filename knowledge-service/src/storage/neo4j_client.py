@@ -132,6 +132,7 @@ async def local_query(
     depth: int = 2,
     limit: int = 50,
     keywords: list[str] | None = None,
+    dataset_id: str | None = None,
 ) -> dict[str, Any]:
     # Cypher forbids parameterized variable-length hops (`*1..$depth`); depth is
     # a validated int from the API schema so f-string interpolation is safe.
@@ -151,7 +152,8 @@ async def local_query(
 
     cypher = f"""
         MATCH (e:Entity {{tenant_id: $tenant}})
-        WHERE any(k IN $keywords WHERE k <> '' AND (
+        WHERE ($dataset IS NULL OR e.dataset_id = $dataset)
+          AND any(k IN $keywords WHERE k <> '' AND (
             toLower(e.name) CONTAINS toLower(k)
             OR (size(e.name) >= 4 AND toLower(k) CONTAINS toLower(e.name))
             OR toLower(coalesce(e.description, '')) CONTAINS toLower(k)
@@ -160,7 +162,8 @@ async def local_query(
         ORDER BY size(e.name) DESC
         LIMIT $seed_limit
         OPTIONAL MATCH (e)-[:RELATED*1..{depth}]-(neighbor:Entity)
-        WHERE neighbor IS NULL OR neighbor.tenant_id = $tenant
+        WHERE (neighbor IS NULL OR neighbor.tenant_id = $tenant)
+          AND ($dataset IS NULL OR neighbor IS NULL OR neighbor.dataset_id = $dataset)
         WITH collect(DISTINCT e) + [n IN collect(DISTINCT neighbor) WHERE n IS NOT NULL] AS nodes
         UNWIND nodes AS node
         WITH DISTINCT node
@@ -175,6 +178,7 @@ async def local_query(
             cypher,
             keywords=uniq_keys,
             tenant=tenant_id,
+            dataset=dataset_id,
             seed_limit=min(limit, 12),
         )
         record = await result.single()
@@ -273,6 +277,7 @@ async def local_query_by_chunks(
     tenant_id: str,
     depth: int = 2,
     limit: int = 50,
+    dataset_id: str | None = None,
 ) -> dict[str, Any]:
     """Find entities mentioned by chunks (fallback when name match fails)."""
     if not isinstance(depth, int) or depth < 1 or depth > 3:
@@ -283,10 +288,12 @@ async def local_query_by_chunks(
     cypher = f"""
         MATCH (c:Chunk)-[:MENTIONS]->(e:Entity {{tenant_id: $tenant}})
         WHERE c.id IN $chunk_ids
+          AND ($dataset IS NULL OR e.dataset_id = $dataset)
         WITH DISTINCT e
         LIMIT $seed_limit
         OPTIONAL MATCH (e)-[:RELATED*1..{depth}]-(neighbor:Entity)
-        WHERE neighbor IS NULL OR neighbor.tenant_id = $tenant
+        WHERE (neighbor IS NULL OR neighbor.tenant_id = $tenant)
+          AND ($dataset IS NULL OR neighbor IS NULL OR neighbor.dataset_id = $dataset)
         WITH collect(DISTINCT e) + [n IN collect(DISTINCT neighbor) WHERE n IS NOT NULL] AS nodes
         UNWIND nodes AS node
         WITH DISTINCT node
@@ -301,6 +308,7 @@ async def local_query_by_chunks(
             cypher,
             chunk_ids=ids,
             tenant=tenant_id,
+            dataset=dataset_id,
             seed_limit=min(limit, 12),
         )
         record = await result.single()

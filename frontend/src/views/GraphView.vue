@@ -4,6 +4,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import GraphCanvas from '@/components/GraphCanvas.vue'
+import DatasetScopeSelect from '@/components/DatasetScopeSelect.vue'
 import {
   createGraphRelation,
   deleteGraphRelation,
@@ -12,10 +13,12 @@ import {
   rebuildCommunities,
 } from '@/api/graph'
 import { useAuthStore } from '@/stores/auth'
+import { useKnowledgeContextStore } from '@/stores/knowledgeContext'
 import { notifyError, notifyInfo, notifySuccess, notifyWarning } from '@/utils/notify'
 import type { Community, GraphEdge, GraphNode } from '@/types'
 
 const auth = useAuthStore()
+const kb = useKnowledgeContextStore()
 const router = useRouter()
 const canvasRef = ref<InstanceType<typeof GraphCanvas>>()
 const loggedIn = computed(() => !!auth.user?.id)
@@ -91,6 +94,10 @@ async function loadLocal() {
     router.push({ path: '/login', query: { redirect: '/graph' } })
     return
   }
+  if (!kb.selectedDatasetId) {
+    notifyWarning('请先选择知识库')
+    return
+  }
   if (!query.value.trim()) {
     notifyWarning('请输入查询内容')
     return
@@ -100,7 +107,11 @@ async function loadLocal() {
   linkMode.value = false
   drawerOpen.value = false
   try {
-    const r = await localGraph({ query: query.value.trim(), depth: depth.value })
+    const r = await localGraph({
+      query: query.value.trim(),
+      depth: depth.value,
+      dataset_id: kb.selectedDatasetId,
+    })
     entities.value = [...r.entities]
     relations.value = [...r.relations]
     graphKey.value += 1
@@ -195,6 +206,7 @@ async function rebuild() {
     />
 
     <div class="toolbar-row card-panel">
+      <DatasetScopeSelect width="220px" />
       <el-input
         v-model="query"
         placeholder="输入问题或实体名"
@@ -207,6 +219,10 @@ async function rebuild() {
       <el-button @click="loadCommunities">查看社区</el-button>
       <el-button type="warning" :loading="rebuilding" @click="rebuild">重建社区</el-button>
     </div>
+
+    <p v-if="kb.selectedDataset" class="scope-hint">
+      当前图谱范围：<strong>{{ kb.selectedDataset.name }}</strong>（仅展示该知识库内文档关联的实体）
+    </p>
 
     <div class="examples">
       <el-tag v-for="ex in examples" :key="ex" class="ex-tag" effect="plain" @click="useExample(ex)">
@@ -349,6 +365,11 @@ async function rebuild() {
 
 <style scoped>
 .mb { margin-bottom: 12px; }
+.scope-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
 .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .ex-tag { cursor: pointer; }
 .graph-layout { display: grid; grid-template-columns: 1fr; gap: 16px; }

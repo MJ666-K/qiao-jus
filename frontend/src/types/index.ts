@@ -22,6 +22,21 @@ export interface Dataset {
   acl: Record<string, unknown> | null
   metadata: Record<string, unknown> | null
   created_at: string
+  document_count?: number
+}
+
+export interface DocumentListSummary {
+  done: number
+  processing: number
+  failed: number
+}
+
+export interface DocumentListResult {
+  items: DocumentItem[]
+  total: number
+  page: number
+  page_size: number
+  summary: DocumentListSummary
 }
 
 export interface DocumentItem {
@@ -190,6 +205,7 @@ export interface Report {
 
 export interface AnalyzeRequest {
   source_doc_id?: string
+  source_doc_ids?: string[]
   text?: string
   title?: string
   report_type?: ReportType
@@ -200,6 +216,8 @@ export interface ConversationSummary {
   id: string
   title: string
   report_id?: string | null
+  report_ids?: string[]
+  dataset_ids?: string[]
   track?: string | null
   message_count: number
   enable_thinking: boolean
@@ -222,6 +240,8 @@ export interface Conversation {
   tenant_id: string
   user_id: string
   report_id?: string | null
+  report_ids?: string[]
+  dataset_ids?: string[]
   title: string
   track?: string | null
   enable_thinking: boolean
@@ -233,21 +253,21 @@ export interface Conversation {
 export interface ConversationCreate {
   title?: string
   report_id?: string
+  report_ids?: string[]
+  dataset_ids?: string[]
   track?: string
   enable_thinking?: boolean
 }
 
 export type WsClientMessage =
-  | { type: 'init'; conversation_id?: string; report_id?: string }
+  | { type: 'init'; conversation_id?: string }
   | { type: 'message'; content: string }
-  | { type: 'bind_report'; report_id?: string }
   | { type: 'stop' }
 
 export type WsServerMessage =
-  | { type: 'connected'; session_id: string; report_id?: string | null }
+  | { type: 'connected'; session_id: string; report_ids?: string[]; dataset_ids?: string[] }
   | { type: 'status'; content: string }
   | { type: 'token'; content: string }
   | { type: 'citation'; chunk_id?: string; document_id?: string; source_type: SourceType; source_title: string; excerpt?: string; page?: number }
   | { type: 'done'; message_id: string; content?: string; confidence: number; citations: Citation[]; suggested_questions: string[] }
-  | { type: 'report_bound'; report_id?: string | null }
   | { type: 'error'; message: string }

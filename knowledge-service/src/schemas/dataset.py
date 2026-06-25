@@ -28,3 +28,4 @@ class DatasetOut(BaseModel):
     acl: dict[str, Any]
     metadata: dict[str, Any]
     created_at: datetime
+    document_count: int = 0

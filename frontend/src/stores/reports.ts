@@ -35,10 +35,18 @@ export const useReportsStore = defineStore('reports', () => {
     return currentReport.value
   }
 
-  async function triggerAnalyze(docId: string, reportType?: ReportType): Promise<Report> {
+  async function triggerAnalyze(
+    docIds: string | string[],
+    reportType?: ReportType,
+  ): Promise<Report> {
     generating.value = true
     error.value = null
-    const payload: AnalyzeRequest = { source_doc_id: docId }
+    const ids = (Array.isArray(docIds) ? docIds : [docIds]).filter(Boolean)
+    const payload: AnalyzeRequest = ids.length > 1
+      ? { source_doc_ids: ids }
+      : ids.length === 1
+        ? { source_doc_id: ids[0] }
+        : {}
     if (reportType) payload.report_type = reportType
     try {
       const r = await analyzeReport(payload)

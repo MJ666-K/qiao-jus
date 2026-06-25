@@ -184,9 +184,11 @@ class Conversation(Base):
     report_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("reports.id", ondelete="SET NULL"), index=True
     )
+    report_ids: Mapped[list] = mapped_column(JSONB, default=list)
     title: Mapped[str] = mapped_column(String(500), default="新对话")
     track: Mapped[str | None] = mapped_column(String(30))
     enable_thinking: Mapped[bool] = mapped_column(default=True)
+    dataset_ids: Mapped[list] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

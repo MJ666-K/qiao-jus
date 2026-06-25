@@ -58,7 +58,7 @@ async def login(payload: UserLogin, session: SessionDep):
 
 
 @router.post("/refresh", response_model=Token)
-async def refresh(payload: TokenRefresh):
+async def refresh(payload: TokenRefresh, session: SessionDep):
     from core.security import TokenError, decode_token
 
     try:

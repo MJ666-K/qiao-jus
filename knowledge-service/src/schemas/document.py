@@ -28,3 +28,17 @@ class DocumentOut(BaseModel):
     metadata: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+
+class DocumentListSummary(BaseModel):
+    done: int = 0
+    processing: int = 0
+    failed: int = 0
+
+
+class DocumentListOut(BaseModel):
+    items: list[DocumentOut]
+    total: int
+    page: int
+    page_size: int
+    summary: DocumentListSummary = DocumentListSummary()

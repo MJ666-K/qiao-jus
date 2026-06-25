@@ -59,8 +59,9 @@ def _to_edges(raw_relations: list[dict]) -> list[GraphEdge]:
 
 @router.post("/local", response_model=GraphQueryResult)
 async def local(payload: GraphQueryRequest, user: CurrentUserDep):
+    ds = str(payload.dataset_id) if payload.dataset_id else None
     res = await resolve_graph_entities(
-        payload.query, user.tenant_id, payload.depth, limit=50
+        payload.query, user.tenant_id, payload.depth, limit=50, dataset_id=ds
     )
     raw_entities = (res or {}).get("entities", [])
     raw_relations = (res or {}).get("relations", [])

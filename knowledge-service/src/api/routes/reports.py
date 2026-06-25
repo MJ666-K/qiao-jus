@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from api.deps import CurrentUserDep, SessionDep
 from models.base import Document, Report
@@ -19,27 +20,45 @@ _DOC_TYPE_TO_REPORT_TYPE = {
 }
 
 
+async def _load_source_docs(session: SessionDep, doc_ids: list[uuid.UUID], tenant_id: str) -> list[Document]:
+    if not doc_ids:
+        return []
+    res = await session.execute(
+        select(Document)
+        .options(joinedload(Document.dataset))
+        .where(Document.id.in_(doc_ids))
+    )
+    found = {d.id: d for d in res.scalars().unique().all()}
+    source_docs: list[Document] = []
+    for doc_id in doc_ids:
+        doc = found.get(doc_id)
+        if not doc or str(doc.dataset.tenant_id) != tenant_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"source document not found: {doc_id}")
+        source_docs.append(doc)
+    return source_docs
+
+
 @router.post("/analyze", response_model=ReportOut, status_code=status.HTTP_202_ACCEPTED)
 async def analyze(payload: AnalyzeRequest, user: CurrentUserDep, session: SessionDep):
-    if not payload.source_doc_id and not payload.text:
-        raise HTTPException(400, "must provide source_doc_id or text")
+    doc_ids = payload.resolved_doc_ids()
+    if not doc_ids and not payload.text:
+        raise HTTPException(400, "must provide source_doc_id(s) or text")
 
-    source_doc = None
+    source_docs = await _load_source_docs(session, doc_ids, user.tenant_id)
+
     doc_type_for_report = None
-    if payload.source_doc_id:
-        source_doc = await session.get(Document, payload.source_doc_id)
-        if not source_doc or str(source_doc.dataset.tenant_id) != user.tenant_id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "source document not found")
-        doc_type_for_report = (source_doc.metadata_ or {}).get("doc_type", "contract")
+    if source_docs:
+        doc_type_for_report = (source_docs[0].metadata_ or {}).get("doc_type", "contract")
 
     report_type = payload.report_type or _DOC_TYPE_TO_REPORT_TYPE.get(doc_type_for_report or "", "contract_review")
 
     report = Report(
         tenant_id=uuid.UUID(user.tenant_id),
         user_id=uuid.UUID(user.user_id),
-        source_doc_id=source_doc.id if source_doc else None,
+        source_doc_id=source_docs[0].id if source_docs else None,
         type=report_type,
         status="pending",
+        content_json={"source_doc_ids": [str(d.id) for d in source_docs]} if source_docs else {},
     )
     session.add(report)
     await session.commit()
@@ -50,7 +69,8 @@ async def analyze(payload: AnalyzeRequest, user: CurrentUserDep, session: Sessio
             "report_id": str(report.id),
             "tenant_id": user.tenant_id,
             "user_id": user.user_id,
-            "source_doc_id": str(payload.source_doc_id) if payload.source_doc_id else None,
+            "source_doc_id": str(source_docs[0].id) if source_docs else None,
+            "source_doc_ids": [str(d.id) for d in source_docs] if source_docs else None,
             "report_type": report_type,
             "text": payload.text,
             "title": payload.title,

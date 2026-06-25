@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useReportsStore } from '@/stores/reports'
 
 const router = useRouter()
 const store = useReportsStore()
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const reportTypeLabel: Record<string, string> = {
   contract_review: '合同审查',
@@ -23,9 +25,25 @@ const statusTagType: Record<string, 'success' | 'warning' | 'danger' | 'info'> =
 
 const statusLabel: Record<string, string> = {
   done: '完成',
-  pending: '排队中',
+  pending: '待生成',
   generating: '生成中',
   failed: '失败',
+}
+
+function hasInProgressReports() {
+  return store.reports.some((r) => r.status === 'pending' || r.status === 'generating')
+}
+
+function startPollingIfNeeded() {
+  if (pollTimer || !hasInProgressReports()) return
+  pollTimer = setInterval(() => {
+    void store.loadList().then(() => {
+      if (!hasInProgressReports() && pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+    })
+  }, 3000)
 }
 
 function viewReport(id: string) {
@@ -36,8 +54,13 @@ function newReport() {
   router.push({ name: 'report-new' })
 }
 
-onMounted(() => {
-  store.loadList()
+onMounted(async () => {
+  await store.loadList()
+  startPollingIfNeeded()
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 
@@ -70,7 +93,7 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="摘要" min-width="320">
           <template #default="{ row }">
-            <span class="summary">{{ row.summary || (row.status === 'done' ? '（无摘要）' : '生成中...') }}</span>
+            <span class="summary">{{ row.summary || (row.status === 'done' ? '（无摘要）' : '—') }}</span>
           </template>
         </el-table-column>
         <el-table-column label="置信度" width="100">
