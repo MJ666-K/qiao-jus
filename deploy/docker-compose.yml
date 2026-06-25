@@ -1,19 +1,11 @@
 name: fengqiao
 
-x-app-env: &app-env
-  APP_ENV: production
-  DATABASE_URL: postgresql+asyncpg://fengqiao:fengqiao123@postgres:5432/fengqiao
-  QDRANT_URL: http://qdrant:6333
-  NEO4J_URI: bolt://neo4j:7687
-  NEO4J_USER: neo4j
-  NEO4J_PASSWORD: fengqiao123
-  REDIS_URL: redis://redis:6379/0
-  CELERY_BROKER_URL: redis://redis:6379/1
-  CELERY_RESULT_BACKEND: redis://redis:6379/2
+# 容器间通信用 compose 服务名 + 容器内部端口，见 deploy/.env
+# 对外仅暴露 nginx :80；调试时可取消注释各服务 ports
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: fengqiao-postgres
     restart: unless-stopped
     environment:
@@ -22,13 +14,14 @@ services:
       POSTGRES_PASSWORD: fengqiao123
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fengqiao -d fengqiao"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
+      start_period: 30s
     networks:
       - fengqiao-net
 
@@ -36,16 +29,17 @@ services:
     image: docker.m.daocloud.io/qdrant/qdrant:v1.12.4
     container_name: fengqiao-qdrant
     restart: unless-stopped
-    ports:
-      - "6333:6333"
-      - "6334:6334"
+    # ports:
+    #   - "6333:6333"
+    #   - "6334:6334"
     volumes:
       - ./data/qdrant:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 15s
     networks:
       - fengqiao-net
 
@@ -56,16 +50,17 @@ services:
     environment:
       NEO4J_AUTH: neo4j/fengqiao123
       NEO4J_PLUGINS: '["apoc"]'
-    ports:
-      - "7474:7474"
-      - "7687:7687"
+    # ports:
+    #   - "7474:7474"
+    #   - "7687:7687"
     volumes:
       - ./data/neo4j:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "fengqiao123", "RETURN 1"]
       interval: 10s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 10
+      start_period: 40s
     networks:
       - fengqiao-net
 
@@ -73,8 +68,8 @@ services:
     image: redis:7-alpine
     container_name: fengqiao-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # ports:
+    #   - "6379:6379"
     volumes:
       - ./data/redis:/data
     healthcheck:
@@ -94,11 +89,10 @@ services:
       qdrant:   { condition: service_healthy }
       neo4j:    { condition: service_healthy }
       redis:    { condition: service_healthy }
-    environment: *app-env
     env_file:
-      - ../knowledge-service/.env
-    ports:
-      - "8000:8000"
+      - ./.env
+    # ports:
+    #   - "8000:8000"
     networks:
       - fengqiao-net
 
@@ -112,9 +106,8 @@ services:
       qdrant:   { condition: service_healthy }
       neo4j:    { condition: service_healthy }
       redis:    { condition: service_healthy }
-    environment: *app-env
     env_file:
-      - ../knowledge-service/.env
+      - ./.env
     networks:
       - fengqiao-net
 
@@ -128,7 +121,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ../frontend/dist:/usr/share/nginx/html:ro
+      - ./app:/usr/share/nginx/html:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
       interval: 30s

@@ -51,8 +51,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.is_dev else [],
-    allow_credentials=True,
+    # 生产环境经 nginx 同源反代；若直连 API 或跨域访问，需放开 origins
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

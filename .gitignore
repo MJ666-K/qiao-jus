@@ -4,6 +4,8 @@ dist/
 *.local
 .env
 .env.*
+!deploy/.env.example
+!knowledge-service/.env.example
 
 docs/*
 !docs/data/
