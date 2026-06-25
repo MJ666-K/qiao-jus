@@ -90,9 +90,10 @@ onMounted(async () => {
   <div v-loading="loading" class="dashboard">
     <!-- 欢迎区 -->
     <section class="hero card-panel">
+      <div class="hero-decor" aria-hidden="true" />
       <div class="hero-text">
         <p class="hero-greet">你好，{{ displayName }}</p>
-        <h2 class="hero-title">法律智能辅助工作台</h2>
+        <h2 class="hero-title">法律智能辅助<span class="emph">工作台</span></h2>
         <p class="hero-sub">上传材料、生成报告、我的助手，一站完成</p>
       </div>
       <div class="hero-actions">
@@ -212,13 +213,27 @@ onMounted(async () => {
 
 /* Hero */
 .hero {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   padding: 28px 32px;
-  background: linear-gradient(135deg, var(--brand-primary-soft) 0%, var(--brand-surface) 55%, #fafaf9 100%);
-  border: 1px solid var(--brand-primary-light);
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid var(--border-default);
+}
+
+.hero-decor {
+  position: absolute;
+  top: -40%;
+  right: -5%;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow-amber), transparent 70%);
+  filter: blur(8px);
+  pointer-events: none;
 }
 
 .hero-greet {
@@ -230,15 +245,26 @@ onMounted(async () => {
 
 .hero-title {
   margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
   color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.hero-title .emph {
+  color: var(--brand-primary);
+  font-style: italic;
 }
 
 .hero-sub {
   margin: 0;
   font-size: 14px;
-  color: var(--text-secondary);
+  color: var(--text-body);
+}
+
+.hero-text {
+  position: relative;
+  z-index: 1;
 }
 
 .hero-actions {

@@ -103,12 +103,9 @@ const displayName = computed(
   () => auth.user?.display_name || auth.user?.email?.split("@")[0] || "—",
 );
 
-function handleUserCommand(cmd: string) {
-  if (cmd === "settings") router.push("/settings");
-  else if (cmd === "logout") {
-    auth.logout();
-    router.push("/login");
-  }
+function logout() {
+  auth.logout();
+  router.push("/login");
 }
 
 onMounted(async () => {
@@ -120,6 +117,12 @@ onMounted(async () => {
 
 <template>
   <div class="layout">
+    <div class="ambient" aria-hidden="true">
+      <div class="ambient-glow ambient-glow-a" />
+      <div class="ambient-glow ambient-glow-b" />
+      <div class="ambient-glow ambient-glow-c" />
+    </div>
+
     <aside class="sidebar" :class="{ 'sidebar--collapsed': sidebarCollapsed }">
       <div class="brand">
         <div class="brand-icon">枫</div>
@@ -159,17 +162,13 @@ onMounted(async () => {
       </nav>
 
       <div class="sidebar-footer">
-        <el-dropdown
+        <div
           v-if="auth.user"
-          trigger="click"
-          placement="top-start"
-          @command="handleUserCommand"
+          class="user-bar"
+          :class="{ 'user-bar--compact': sidebarCollapsed }"
         >
-          <div
-            class="user-trigger"
-            :class="{ 'user-trigger--compact': sidebarCollapsed }"
-          >
-            <el-avatar :size="34" class="user-avatar">{{
+          <div class="user-profile">
+            <el-avatar :size="36" class="user-avatar">{{
               avatarText
             }}</el-avatar>
             <div v-show="!sidebarCollapsed" class="user-info">
@@ -177,34 +176,33 @@ onMounted(async () => {
               <span class="user-role">{{ roleLabel }}</span>
             </div>
           </div>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="settings">
-                <el-icon><Setting /></el-icon>
-                系统配置
-              </el-dropdown-item>
-              <el-dropdown-item command="logout" divided>
-                <el-icon><SwitchButton /></el-icon>
-                退出登录
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+          <button
+            type="button"
+            class="logout-btn"
+            title="退出登录"
+            @click="logout"
+          >
+            <el-icon><SwitchButton /></el-icon>
+          </button>
+        </div>
 
         <div v-else class="user-trigger guest" @click="router.push('/login')">
-          <el-avatar :size="34" class="user-avatar guest-avatar">
+          <el-avatar :size="36" class="user-avatar guest-avatar">
             <el-icon><User /></el-icon>
           </el-avatar>
-          <span class="user-name">点击登录</span>
+          <span v-show="!sidebarCollapsed" class="user-name">点击登录</span>
         </div>
       </div>
     </aside>
 
     <main class="main">
       <header v-if="!route.meta.fillHeight" class="topbar">
-        <h1 class="page-heading">
-          {{ (route.meta.title as string) || "枫桥智诉" }}
-        </h1>
+        <div class="topbar-inner">
+          <h1 class="page-heading">
+            {{ (route.meta.title as string) || "枫桥智诉" }}
+          </h1>
+          <p class="page-sub">AI 法律智能辅助平台</p>
+        </div>
       </header>
 
       <section
@@ -227,6 +225,7 @@ onMounted(async () => {
 
 <style scoped>
 .layout {
+  position: relative;
   display: flex;
   height: 100vh;
   height: 100dvh;
@@ -234,58 +233,133 @@ onMounted(async () => {
   background: var(--brand-bg);
 }
 
-/* Sidebar */
+/* 登录页同款氛围光晕 */
+.ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ambient-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+}
+
+.ambient-glow-a {
+  width: 480px;
+  height: 480px;
+  top: -8%;
+  left: 18%;
+  background: radial-gradient(circle, var(--glow-mint), transparent 68%);
+  animation: float-a 12s ease-in-out infinite;
+}
+
+.ambient-glow-b {
+  width: 420px;
+  height: 420px;
+  top: 35%;
+  right: 8%;
+  background: radial-gradient(circle, var(--glow-rose), transparent 68%);
+  animation: float-b 14s ease-in-out infinite;
+}
+
+.ambient-glow-c {
+  width: 360px;
+  height: 360px;
+  bottom: 5%;
+  left: 42%;
+  background: radial-gradient(circle, var(--glow-amber), transparent 68%);
+  animation: float-c 10s ease-in-out infinite;
+}
+
+@keyframes float-a {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(24px, 18px);
+  }
+}
+
+@keyframes float-b {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-20px, 24px);
+  }
+}
+
+@keyframes float-c {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(16px, -16px);
+  }
+}
+
+/* 浅色侧边栏 — 对齐登录右侧白底 */
 .sidebar {
+  position: relative;
+  z-index: 2;
   width: var(--sidebar-width);
   flex-shrink: 0;
-  background: var(--brand-sidebar);
-  color: var(--text-inverse);
+  background: rgb(255 255 255 / 92%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
+  padding: 16px 14px;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  border-right: 1px solid rgb(0 0 0 / 20%);
+  border-right: 1px solid var(--brand-sidebar-border);
+  box-shadow: 2px 0 16px rgb(28 25 23 / 3%);
   transition:
     width 0.22s ease,
     padding 0.22s ease;
 }
 
 .sidebar--collapsed {
-  width: 68px;
-  padding: 16px 8px;
+  width: var(--sidebar-collapsed-width);
+  padding: 16px 10px;
 }
 
 .brand {
   display: flex;
   gap: 10px;
   align-items: center;
-  padding: 6px 8px 20px;
+  padding: 4px 6px 18px;
   position: relative;
 }
 
 .sidebar--collapsed .brand {
   flex-direction: column;
   gap: 8px;
-  padding: 6px 4px 16px;
+  padding: 4px 2px 14px;
 }
 
 .sidebar-toggle {
   margin-left: auto;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 8px;
-  background: rgb(255 255 255 / 8%);
-  color: #a8a29e;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text-muted);
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition:
-    background 0.15s,
-    color 0.15s;
+  transition: all 0.15s;
 }
 
 .sidebar--collapsed .sidebar-toggle {
@@ -293,40 +367,43 @@ onMounted(async () => {
 }
 
 .sidebar-toggle:hover {
-  background: rgb(255 255 255 / 14%);
-  color: #e7e5e4;
+  border-color: var(--brand-primary-light);
+  color: var(--brand-primary);
+  background: var(--brand-primary-soft);
 }
 
 .brand-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #f97316, #ea580c);
   display: grid;
   place-items: center;
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 700;
   color: #fff;
-  box-shadow: 0 4px 12px rgb(249 115 22 / 35%);
+  box-shadow: 0 4px 12px rgb(249 115 22 / 30%);
+  flex-shrink: 0;
 }
 
 .brand-title {
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.02em;
+  color: var(--text-primary);
 }
 
 .brand-sub {
   font-size: 11px;
-  color: #78716c;
-  margin-top: 1px;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .nav {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   overflow-y: auto;
   padding: 0 2px;
 }
@@ -334,25 +411,24 @@ onMounted(async () => {
 .nav-group-label {
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #57534e;
-  padding: 0 10px 6px;
+  color: var(--text-muted);
+  padding: 0 10px 8px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  color: #a8a29e;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
   text-decoration: none;
   font-size: 13px;
-  transition:
-    background 0.15s,
-    color 0.15s;
-  margin-bottom: 2px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  margin-bottom: 4px;
 }
 
 .sidebar--collapsed .nav-item {
@@ -360,41 +436,85 @@ onMounted(async () => {
   padding: 10px 8px;
 }
 
-.user-trigger--compact {
-  justify-content: center;
-  padding: 8px 4px;
-}
-
 .nav-icon {
-  font-size: 16px;
-  opacity: 0.85;
+  font-size: 17px;
+  color: var(--text-muted);
+  transition: color 0.15s;
 }
 
 .nav-item:hover {
   background: var(--brand-sidebar-hover);
-  color: #e7e5e4;
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.nav-item:hover .nav-icon {
+  color: var(--brand-primary);
 }
 
 .nav-item.active {
   background: var(--brand-sidebar-active);
-  color: #fdba74;
+  color: var(--brand-primary-dark);
   font-weight: 600;
+  border-color: var(--brand-primary-light);
+  box-shadow: 0 0 0 1px rgb(249 115 22 / 8%);
 }
 
 .nav-item.active .nav-icon {
-  opacity: 1;
-  color: #f97316;
+  color: var(--brand-primary);
 }
 
 .sidebar-footer {
-  border-top: 1px solid rgb(255 255 255 / 8%);
+  border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
   margin-top: 8px;
 }
 
-.sidebar-footer :deep(.el-dropdown) {
-  display: block;
-  width: 100%;
+.user-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+
+.user-bar--compact {
+  flex-direction: column;
+  padding: 6px 4px;
+  gap: 6px;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.user-bar--compact .user-profile {
+  justify-content: center;
+}
+
+.logout-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s;
+}
+
+.logout-btn:hover {
+  color: #ef4444;
+  border-color: #fecaca;
+  background: #fef2f2;
 }
 
 .user-trigger {
@@ -402,14 +522,16 @@ onMounted(async () => {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px;
-  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 0.15s;
+  border: 1px solid transparent;
+  transition: all 0.15s;
 }
 
-.user-trigger:hover {
+.user-trigger.guest:hover {
   background: var(--brand-sidebar-hover);
+  border-color: var(--border-subtle);
 }
 
 .user-avatar {
@@ -421,19 +543,21 @@ onMounted(async () => {
 }
 
 .guest-avatar {
-  background: #44403c;
+  background: #e5e7eb;
+  color: #6b7280;
 }
 
 .user-info {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
 .user-name {
   font-size: 13px;
-  color: #e7e5e4;
+  font-weight: 600;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -441,11 +565,13 @@ onMounted(async () => {
 
 .user-role {
   font-size: 11px;
-  color: #78716c;
+  color: var(--text-muted);
 }
 
-/* Main */
+/* 主内容区 */
 .main {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -461,15 +587,36 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   padding: 0 var(--page-padding-x);
-  background: var(--brand-surface);
-  border-bottom: 1px solid var(--border-subtle);
+  background: rgb(255 255 255 / 88%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .page-heading {
   margin: 0;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.page-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.page-sub::before {
+  content: "·";
+  margin-right: 12px;
+  color: var(--border-strong);
 }
 
 .content {
@@ -497,15 +644,9 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-:deep(.el-dropdown-menu__item) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 @media (max-width: 768px) {
   .sidebar {
-    width: 64px;
+    width: var(--sidebar-collapsed-width);
     padding: 12px 8px;
   }
 
@@ -513,7 +654,8 @@ onMounted(async () => {
   .nav-group-label,
   .nav-item span,
   .user-info,
-  .user-name {
+  .user-name,
+  .page-sub {
     display: none;
   }
 

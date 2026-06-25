@@ -369,8 +369,8 @@ onUnmounted(() => simulation?.stop())
 <style scoped>
 .graph-canvas {
   min-height: 480px;
-  background: #f8fafc;
-  border-radius: 8px;
+  background: rgb(255 255 255 / 80%);
+  border-radius: var(--radius-md);
   position: relative;
   overflow: hidden;
 }

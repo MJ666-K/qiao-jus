@@ -935,7 +935,7 @@ onUnmounted(() => store.disconnect());
   height: 100%;
   min-height: 0;
   max-height: 100%;
-  background: #eef1f5;
+  background: var(--brand-bg);
   overflow: hidden;
 }
 
@@ -944,8 +944,8 @@ onUnmounted(() => store.disconnect());
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  background: #fafbfc;
-  border-right: 1px solid #e4e9ef;
+  background: rgb(255 255 255 / 95%);
+  border-right: 1px solid var(--border-default);
   flex-shrink: 0;
   transition: width 0.22s ease;
   overflow: hidden;
