@@ -57,6 +57,15 @@ chmod +x scripts/*.sh
 
 > **注意**：`deploy/.env` 用容器服务名（`postgres`、`redis` 等）；本地开发用 `knowledge-service/.env`（`localhost`）。
 
+**首次登录**：生产环境数据库为空，不会自动有 seed 账号。容器启动后执行：
+
+```bash
+cd deploy && ./scripts/bootstrap_user.sh
+# 默认 seed@demo.com / seed12345（密码至少 8 位，不能填 admin）
+```
+
+或在页面「注册」新账号（密码 ≥ 8 位 + 验证码）。测试账号见登录页预填：`seed@demo.com` / `seed12345`。
+
 | 入口 | 地址 |
 |------|------|
 | 前端 | http://localhost |

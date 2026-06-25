@@ -58,6 +58,11 @@ onUnmounted(() => {
 
 async function submit() {
   error.value = ''
+  if (mode.value === 'register' && password.value.length < 8) {
+    error.value = '密码至少 8 位'
+    notifyError('注册失败', error.value)
+    return
+  }
   try {
     if (mode.value === 'login') {
       await auth.login(email.value, password.value, captchaKey.value, captchaCode.value)
@@ -113,9 +118,14 @@ async function submit() {
           <el-form-item label="邮箱">
             <el-input v-model="email" type="email" placeholder="请输入邮箱地址" />
           </el-form-item>
-          <el-form-item label="密码">
-            <el-input v-model="password" type="password" show-password placeholder="请输入密码" />
-          </el-form-item>
+            <el-form-item label="密码">
+              <el-input
+                v-model="password"
+                type="password"
+                show-password
+                :placeholder="mode === 'register' ? '至少 8 位' : '请输入密码'"
+              />
+            </el-form-item>
           <el-form-item v-if="mode === 'register'" label="租户名称">
             <el-input v-model="tenantName" placeholder="组织名称" />
           </el-form-item>

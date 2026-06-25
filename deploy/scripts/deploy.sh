@@ -90,6 +90,10 @@ main() {
   静态:   $APP_DIR/
   停止:   docker compose down
   日志:   docker compose logs -f
+
+首次部署需创建管理员（生产库无 seed 账号）:
+  ./scripts/bootstrap_user.sh
+  # 默认 seed@demo.com / seed12345；密码至少 8 位
 EOF
 }
 
