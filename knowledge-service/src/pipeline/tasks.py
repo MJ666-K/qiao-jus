@@ -80,6 +80,7 @@ def parse_document(self, doc_id: str, source_uri: str) -> dict[str, Any]:
             doc.metadata_ = {**doc.metadata_, "blocks": len(blocks)}
             _record_job(session, doc_id, "parse", "done", {"chars": len(text)})
             session.commit()
+            logger.info("[Ingest] parse done doc_id=%s chars=%d blocks=%d", doc_id, len(text), len(blocks))
             return {"doc_id": doc_id, "text": text, "chars": len(text), "hash": content_hash}
         except Exception as e:
             _set_status(session, doc_id, FAILED, str(e))
@@ -110,6 +111,16 @@ def chunk_and_embed(
             units = build_chunks_for_doc(text, doc_type, doc_meta)
             if not units:
                 raise ValueError("no chunks produced from text")
+
+            parent_count = sum(1 for u in units if u.is_parent)
+            child_count = sum(1 for u in units if not u.is_parent)
+            logger.info(
+                "[Ingest] chunk doc_id=%s doc_type=%s parents=%d children=%d",
+                doc_id,
+                doc_type,
+                parent_count,
+                child_count,
+            )
 
             _set_status(session, doc_id, CHUNKING)
             session.commit()
@@ -198,7 +209,6 @@ def chunk_and_embed(
                         "level": meta.get("level"),
                         "domain": meta.get("domain"),
                         "cause": meta.get("cause"),
-                        "court_level": meta.get("court_level"),
                         "year": meta.get("year"),
                         "contract_type": meta.get("contract_type"),
                         "dispute_type": meta.get("dispute_type"),
@@ -212,6 +222,12 @@ def chunk_and_embed(
             _set_status(session, doc_id, EMBEDDING)
             _record_job(session, doc_id, "embed", "done", {"chunks": len(points)})
             session.commit()
+            logger.info(
+                "[Ingest] embed done doc_id=%s qdrant_points=%d model=%s",
+                doc_id,
+                len(points),
+                settings.embedding_model_id,
+            )
 
             return {
                 "doc_id": doc_id,
@@ -269,6 +285,12 @@ def build_graph(self, embed_result: dict[str, Any], doc_id: str) -> dict[str, An
                 "entities": total_entities, **community_stats,
             })
             session.commit()
+            logger.info(
+                "[Ingest] graph done doc_id=%s entities=%d communities=%s",
+                doc_id,
+                total_entities,
+                community_stats,
+            )
             return {"doc_id": doc_id, "entities": total_entities, **community_stats}
         except Exception as e:
             _set_status(session, doc_id, FAILED, str(e))

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 import json
+import logging
 
 from api.deps import CurrentUserDep, SessionDep
 from core.llm import chat, stream_chat
@@ -10,10 +11,12 @@ from retrieve.hybrid import retrieve_children
 from schemas.search import AnswerResult, SearchHit, SearchQuery, SearchResult
 
 router = APIRouter(prefix="/search", tags=["search"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=SearchResult)
 async def search(payload: SearchQuery, user: CurrentUserDep):
+    logger.info("[Search] query=%r dataset=%s doc_type=%s", payload.query[:80], payload.dataset_id, payload.doc_type)
     hits = await retrieve_children(
         query=payload.query,
         tenant_id=user.tenant_id,
@@ -35,6 +38,7 @@ async def search(payload: SearchQuery, user: CurrentUserDep):
 
 @router.post("/answer", response_model=AnswerResult)
 async def answer(payload: SearchQuery, user: CurrentUserDep):
+    logger.info("[Search/answer] query=%r", payload.query[:80])
     hits = await retrieve_children(
         query=payload.query,
         tenant_id=user.tenant_id,

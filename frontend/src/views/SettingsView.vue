@@ -146,6 +146,16 @@ onMounted(() => {
             <el-form-item label="Top-K 召回">
               <el-input-number v-model="runtimeConfig.search_top_k" :min="1" :max="50" />
             </el-form-item>
+            <el-form-item label="召回分数阈值">
+              <el-input-number
+                v-model="runtimeConfig.retrieval_min_score"
+                :min="0"
+                :max="1"
+                :step="0.05"
+                :precision="2"
+              />
+              <div class="field-hint">Rerank 后低于此分数的切块不进入 RAG 上下文，默认 0.7</div>
+            </el-form-item>
             <el-form-item label="RRF K 值">
               <el-input-number v-model="runtimeConfig.rrf_k" :min="1" :max="200" />
             </el-form-item>

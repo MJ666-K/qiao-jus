@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     chunk_overlap_tokens: int = 50
 
     search_top_k: int = 10
+    retrieval_min_score: float = 0.7
     rrf_k: int = 60
     rerank_top_k: int = 20
     bm25_k1: float = 1.5

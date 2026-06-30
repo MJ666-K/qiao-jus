@@ -20,6 +20,7 @@ MODULES = [
     "schemas.graph",
     "ingest.parser",
     "ingest.chunker",
+    "ingest.sentences",
     "retrieve.bm25",
     "retrieve.reranker",
     "retrieve.hybrid",

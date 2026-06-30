@@ -12,6 +12,7 @@ class RuntimeConfig(BaseModel):
     chunk_child_tokens: int = Field(ge=50, le=2000)
     chunk_overlap_tokens: int = Field(ge=0, le=200)
     search_top_k: int = Field(ge=1, le=50)
+    retrieval_min_score: float = Field(ge=0, le=1)
     rrf_k: int = Field(ge=1, le=200)
     rerank_top_k: int = Field(ge=5, le=100)
     bm25_k1: float = Field(ge=0, le=3)
@@ -32,6 +33,7 @@ def _runtime_from_settings() -> RuntimeConfig:
         chunk_child_tokens=settings.chunk_child_tokens,
         chunk_overlap_tokens=settings.chunk_overlap_tokens,
         search_top_k=settings.search_top_k,
+        retrieval_min_score=settings.retrieval_min_score,
         rrf_k=settings.rrf_k,
         rerank_top_k=settings.rerank_top_k,
         bm25_k1=settings.bm25_k1,
@@ -52,6 +54,7 @@ def _apply_runtime(payload: RuntimeConfig) -> None:
     settings.chunk_child_tokens = payload.chunk_child_tokens
     settings.chunk_overlap_tokens = payload.chunk_overlap_tokens
     settings.search_top_k = payload.search_top_k
+    settings.retrieval_min_score = payload.retrieval_min_score
     settings.rrf_k = payload.rrf_k
     settings.rerank_top_k = payload.rerank_top_k
     settings.bm25_k1 = payload.bm25_k1

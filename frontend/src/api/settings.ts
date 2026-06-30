@@ -5,6 +5,7 @@ export interface RuntimeConfig {
   chunk_child_tokens: number
   chunk_overlap_tokens: number
   search_top_k: number
+  retrieval_min_score: number
   rrf_k: number
   rerank_top_k: number
   bm25_k1: number

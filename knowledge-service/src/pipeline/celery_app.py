@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.signals import after_setup_logger
 
 from core.config import settings
 
@@ -27,3 +28,16 @@ celery_app.conf.update(
         "pipeline.report_tasks.generate_report": {"queue": "ingest"},
     },
 )
+
+
+@after_setup_logger.connect
+def _configure_celery_logging(logger, *args, **kwargs):
+    import logging
+
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    for handler in logger.handlers:
+        handler.setFormatter(formatter)
+    logger.setLevel(logging.INFO)

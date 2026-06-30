@@ -46,10 +46,26 @@ async def retrieve_children(
     now = time.time()
     cached = _retrieve_cache.get(cache_key)
     if cached and now - cached[0] < _RETRIEVE_TTL:
-        logger.debug("retrieve_children cache hit for query=%s", query[:50])
+        logger.info(
+            "[RAG] cache hit query=%r tenant=%s hits=%d",
+            query[:80],
+            tenant_id,
+            len(cached[1]),
+        )
         return cached[1]
 
     top_k = top_k or settings.search_top_k
+    min_score = settings.retrieval_min_score
+    logger.info(
+        "[RAG] start query=%r tenant=%s dataset=%s doc_type=%s top_k=%d min_score=%.2f",
+        query[:80],
+        tenant_id,
+        dataset_id,
+        doc_type,
+        top_k,
+        min_score,
+    )
+
     dense_filters: dict[str, Any] = {"tenant_id": tenant_id}
     if dataset_id:
         dense_filters["dataset_id"] = dataset_id
@@ -61,18 +77,33 @@ async def retrieve_children(
         dense_filters["_user_scope"] = user_id
 
     query_vec = await _embed_query(query)
+    logger.info("[RAG] step 1/6 embed query dim=%d", len(query_vec))
 
     extend = top_k * settings.dense_top_k_multiplier
     dense_task = search_dense(query_vec, dense_filters, extend)
     bm25_task = _bm25_search(query, tenant_id, dataset_id, doc_type, extend)
     dense_hits, bm25_hits = await asyncio.gather(dense_task, bm25_task)
 
+    dense_top = [(h.id, h.score or 0.0) for h in dense_hits[:3]]
+    logger.info(
+        "[RAG] step 2/6 dense search hits=%d top3=%s",
+        len(dense_hits),
+        [(str(i)[:8], round(s, 4)) for i, s in dense_top],
+    )
+    logger.info(
+        "[RAG] step 3/6 BM25 search hits=%d top3=%s",
+        len(bm25_hits),
+        [(i[:8], round(s, 4)) for i, s in bm25_hits[:3]],
+    )
+
     fused = rrf_fusion(
         dense=[(h.id, h.score or 0.0) for h in dense_hits],
         sparse=[(h["id"], h["score"]) for h in bm25_hits],
     )
+    logger.info("[RAG] step 4/6 RRF fusion candidates=%d", len(fused))
 
     if not fused:
+        logger.info("[RAG] done: no fused candidates")
         return []
 
     ids = [uuid.UUID(pid) for pid, _ in fused[: settings.rerank_top_k]]
@@ -100,6 +131,15 @@ async def retrieve_children(
         })
 
     reranked = await get_reranker().rank(query, candidates, top_k=top_k)
+    logger.info(
+        "[RAG] step 5/6 rerank in=%d out=%d top3=%s",
+        len(candidates),
+        len(reranked),
+        [
+            (r.get("source", "")[:20], round(r.get("_rerank_score", r.get("score", 0)), 4))
+            for r in reranked[:3]
+        ],
+    )
 
     out: list[dict[str, Any]] = []
     seen_parents: set[str] = set()
@@ -122,9 +162,24 @@ async def retrieve_children(
         })
         if len(out) >= top_k:
             break
-    
+
+    before_filter = len(out)
+    out = [r for r in out if r.get("score", 0) >= min_score]
+    logger.info(
+        "[RAG] step 6/6 score filter min=%.2f: %d -> %d hits",
+        min_score,
+        before_filter,
+        len(out),
+    )
+    if out:
+        logger.info(
+            "[RAG] done top hits: %s",
+            [(h.get("source", "")[:24], round(h.get("score", 0), 4)) for h in out[:5]],
+        )
+    else:
+        logger.info("[RAG] done: all hits below min_score=%.2f", min_score)
+
     _retrieve_cache[cache_key] = (now, out)
-    logger.debug("retrieve_children cached result for query=%s", query[:50])
     return out
 
 

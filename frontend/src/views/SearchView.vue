@@ -62,6 +62,7 @@ async function runSearch() {
         <el-option label="法规 law" value="law" />
         <el-option label="类案 case" value="case" />
         <el-option label="合规 compliance" value="compliance" />
+        <el-option label="默认库 default" value="default" />
         <el-option label="合同 contract" value="contract" />
         <el-option label="纠纷 dispute" value="dispute" />
         <el-option label="通用 general" value="general" />

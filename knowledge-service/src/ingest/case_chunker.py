@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
+
+from ingest.sentences import merge_sentences_to_chunks, split_sentences
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -13,95 +18,68 @@ class TextChunk:
     chunk_index: int
 
 
-def _split_sentences(text: str) -> list[str]:
-    parts: list[str] = []
-    buf: list[str] = []
-    for ch in text:
-        buf.append(ch)
-        if ch in "。！？!?；;\n":
-            parts.append("".join(buf))
-            buf = []
-    if buf:
-        parts.append("".join(buf))
-    return [p for p in parts if p.strip()]
-
-
 def sliding_window_chunks(
     text: str,
     max_chars: int,
     overlap: int,
     base_metadata: dict | None = None,
 ) -> list[TextChunk]:
-    """Split text into fixed-size chunks with overlap, respecting sentence boundaries."""
+    """Split text into fixed-size chunks; overlap aligns to sentence boundaries."""
     meta = dict(base_metadata or {})
-    sentences = _split_sentences(text)
+    sentences = split_sentences(text)
     if not sentences:
         stripped = text.strip()
         if not stripped:
             return []
         return [TextChunk(text=stripped, metadata=meta, chunk_index=0)]
 
-    chunks: list[TextChunk] = []
-    cur: list[str] = []
-    cur_len = 0
-    idx = 0
-
-    def flush() -> None:
-        nonlocal idx, cur, cur_len
-        if not cur:
-            return
-        body = "".join(cur).strip()
-        if body:
-            chunks.append(TextChunk(text=body, metadata={**meta, "chunk_index": idx}, chunk_index=idx))
-            idx += 1
-        # overlap tail
-        tail: list[str] = []
-        tail_len = 0
-        for s in reversed(cur):
-            if tail_len + len(s) > overlap:
-                break
-            tail.insert(0, s)
-            tail_len += len(s)
-        cur = tail
-        cur_len = tail_len
-
-    for s in sentences:
-        if cur and cur_len + len(s) > max_chars:
-            flush()
-        cur.append(s)
-        cur_len += len(s)
-    flush()
+    bodies = merge_sentences_to_chunks(
+        sentences,
+        max_units=max_chars,
+        overlap_units=overlap,
+        unit_fn=len,
+    )
+    chunks = [
+        TextChunk(text=body, metadata={**meta, "chunk_index": i}, chunk_index=i)
+        for i, body in enumerate(bodies)
+    ]
+    logger.info(
+        "[Chunk] sliding_window: %d chunks (max_chars=%d overlap=%d sentences=%d)",
+        len(chunks),
+        max_chars,
+        overlap,
+        len(sentences),
+    )
     return chunks
 
 
+# 与 docs/data/README.md 类案格式约定一致，仅解析显式字段
 _CASE_META_RE = {
-    "cause": re.compile(r"【案由】\s*(.+)"),
-    "court": re.compile(r"【法院】\s*(.+)"),
-    "case_no": re.compile(r"【案号】\s*(.+)"),
-    "year": re.compile(r"【裁判年份】\s*(\d{4})"),
+    "cause": re.compile(r"^【案由】\s*([^\n]+)", re.MULTILINE),
+    "court": re.compile(r"^【法院】\s*([^\n]+)", re.MULTILINE),
+    "case_no": re.compile(r"^【案号】\s*([^\n]+)", re.MULTILINE),
+    "year": re.compile(r"^【裁判年份】\s*(\d{4})", re.MULTILINE),
 }
 
-_COURT_LEVEL_KEYWORDS = [
-    ("最高人民法院", "最高"),
-    ("高级人民法院", "高级"),
-    ("中级人民法院", "中级"),
-    ("基层人民法院", "基层"),
-    ("互联网法院", "专门"),
-    ("海事法院", "专门"),
-    ("知识产权法院", "专门"),
+_HEADER_STRIP_RES = [
+    re.compile(r"^#\s*.+$", re.MULTILINE),
+    re.compile(r"^【案由】[^\n]*$", re.MULTILINE),
+    re.compile(r"^【法院】[^\n]*$", re.MULTILINE),
+    re.compile(r"^【案号】[^\n]*$", re.MULTILINE),
+    re.compile(r"^【裁判年份】[^\n]*$", re.MULTILINE),
 ]
 
 
-def _infer_court_level(court: str | None) -> str | None:
-    if not court:
-        return None
-    for keyword, level in _COURT_LEVEL_KEYWORDS:
-        if keyword in court:
-            return level
-    return "基层"
+def extract_case_body(text: str) -> str:
+    """Remove markdown header lines; return裁判要旨正文 for chunking."""
+    body = text
+    for pat in _HEADER_STRIP_RES:
+        body = pat.sub("", body)
+    return body.strip()
 
 
-def parse_case_header(text: str) -> dict:
+def split_case_document(text: str) -> tuple[dict, str]:
+    """Parse case header metadata and return (meta, body_without_header)."""
     meta: dict = {"doc_type": "case"}
     title = re.search(r"^#\s*(.+)$", text, re.MULTILINE)
     if title:
@@ -110,7 +88,11 @@ def parse_case_header(text: str) -> dict:
         m = pat.search(text)
         if m:
             meta[key] = m.group(1).strip()
-    inferred_level = _infer_court_level(meta.get("court"))
-    if inferred_level:
-        meta["court_level"] = inferred_level
+    body = extract_case_body(text)
+    return meta, body
+
+
+def parse_case_header(text: str) -> dict:
+    """Backward-compatible: metadata only."""
+    meta, _ = split_case_document(text)
     return meta

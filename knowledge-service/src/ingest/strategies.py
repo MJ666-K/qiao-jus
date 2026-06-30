@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ingest.case_chunker import parse_case_header, sliding_window_chunks
+from ingest.case_chunker import sliding_window_chunks, split_case_document
 from ingest.chunker import build_parent_child
 from ingest.doc_types import CASE, CHUNK_PARAMS, COMPLIANCE, GENERAL, LAW
 from ingest.law_chunker import split_law_articles
@@ -36,10 +36,13 @@ def build_chunks_for_doc(text: str, doc_type: str, doc_metadata: dict | None = N
         ]
 
     if doc_type in {CASE, COMPLIANCE}:
-        header = parse_case_header(text) if doc_type == CASE else {"doc_type": COMPLIANCE}
+        if doc_type == CASE:
+            header, body = split_case_document(text)
+        else:
+            header, body = {"doc_type": COMPLIANCE}, text
         merged = {**header, **meta}
         raw = sliding_window_chunks(
-            text,
+            body,
             max_chars=params["max_chars"],
             overlap=params["overlap"],
             base_metadata=merged,

@@ -38,7 +38,7 @@ export async function getDocument(id: string): Promise<DocumentItem> {
 export async function uploadDocument(
   file: File,
   datasetId: string,
-  docType = 'general',
+  docType = 'default',
 ): Promise<DocumentItem> {
   const form = new FormData()
   form.append('file', file)

@@ -31,7 +31,6 @@ router = APIRouter(tags=["ws"])
 
 HISTORY_TURNS = 10
 TOP_K_RETRIEVAL = 8
-MIN_RETRIEVAL_SCORE = 0.15
 
 
 def _uuid(s: str) -> uuid.UUID:
@@ -193,6 +192,13 @@ async def _handle_message(
     citations = await _gather_citations(
         user_content, tenant_id, report_ids, user_id, dataset_ids
     )
+    logger.info(
+        "[WS] RAG citations=%d datasets=%s reports=%s query=%r",
+        len(citations),
+        dataset_ids,
+        report_ids,
+        user_content[:80],
+    )
     report_context = (
         await _load_reports_context(report_ids, tenant_id) if report_ids else ""
     )
@@ -305,6 +311,7 @@ async def _gather_citations(
     rids = [r for r in (report_ids or []) if r]
 
     if not ids and not rids:
+        logger.info("[WS] RAG skip: no dataset/report bindings")
         return []
 
     for ds_id in ids:
@@ -315,9 +322,8 @@ async def _gather_citations(
             top_k=TOP_K_RETRIEVAL,
             user_id=user_id,
         )
+        logger.info("[WS] dataset=%s raw_hits=%d", ds_id, len(hits))
         for h in hits:
-            if h.get("score", 0) < MIN_RETRIEVAL_SCORE:
-                continue
             dt = h.get("doc_type") or "user_doc"
             st = "law" if dt == "law" else "case" if dt == "case" else "user_doc"
             if dt == "compliance":
@@ -342,9 +348,8 @@ async def _gather_citations(
             top_k=3,
             user_id=user_id,
         )
+        logger.info("[WS] report RAG hits=%d", len(report_hits))
         for h in report_hits:
-            if h.get("score", 0) < MIN_RETRIEVAL_SCORE:
-                continue
             out.append(
                 Citation(
                     chunk_id=h.get("chunk_id"),
@@ -365,6 +370,7 @@ async def _gather_citations(
             continue
         seen.add(key)
         deduped.append(c)
+    logger.info("[WS] citations after dedup=%d", len(deduped[:10]))
     return deduped[:10]
 
 

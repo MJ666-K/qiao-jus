@@ -29,7 +29,7 @@ class Reranker:
         try:
             return await self._api_rank(query, candidates, limit)
         except Exception as e:
-            logger.warning("Rerank API failed, keeping RRF order: %s", e)
+            logger.warning("[RAG] rerank API failed, keeping RRF order: %s", e)
             return candidates[:limit]
 
     async def _api_rank(
@@ -56,6 +56,12 @@ class Reranker:
                 out.append(dict(c, _rerank_score=c.get("score", 0.0)))
                 if len(out) >= top_k:
                     break
+        logger.info(
+            "[RAG] rerank API returned %d/%d (top score=%.4f)",
+            len(out),
+            top_k,
+            out[0].get("_rerank_score", 0) if out else 0.0,
+        )
         return out[:top_k]
 
 

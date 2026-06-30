@@ -77,32 +77,48 @@ def test_get_user_report_returns_none_for_missing_id():
     assert result == {"report": None}
 
 
-def test_court_level_inference():
-    from ingest.case_chunker import _infer_court_level
-    assert _infer_court_level("北京市第一中级人民法院") == "中级"
-    assert _infer_court_level("最高人民法院") == "最高"
-    assert _infer_court_level("上海市高级人民法院") == "高级"
-    assert _infer_court_level("海淀区人民法院") == "基层"
-    assert _infer_court_level("北京互联网法院") == "专门"
-    assert _infer_court_level(None) is None
-    assert _infer_court_level("某法院") == "基层"
+def test_case_header_and_body_split():
+    from ingest.case_chunker import split_case_document
 
-
-def test_case_header_parses_court_level():
-    from ingest.case_chunker import parse_case_header
     sample = """# 物业纠纷案
 
 【案由】物业服务合同纠纷
 【法院】北京市第一中级人民法院
 【案号】（2024）京01民终123号
 【裁判年份】2024
+
+裁判要旨正文第一段。
 """
-    meta = parse_case_header(sample)
+    meta, body = split_case_document(sample)
+    assert meta["title"] == "物业纠纷案"
     assert meta["cause"] == "物业服务合同纠纷"
     assert meta["court"] == "北京市第一中级人民法院"
     assert meta["case_no"] == "（2024）京01民终123号"
     assert meta["year"] == "2024"
-    assert meta["court_level"] == "中级"
+    assert "court_level" not in meta
+    assert "【案由】" not in body
+    assert "【法院】" not in body
+    assert body.startswith("裁判要旨正文")
+
+
+def test_case_chunks_exclude_header():
+    from ingest.strategies import build_chunks_for_doc
+
+    text = """# 休息日加班案
+【案由】劳动争议
+【法院】北京市朝阳区人民法院
+【案号】（2024）京0105民初8832号
+【裁判年份】2024
+
+劳动者主张休息日加班未支付双倍工资。法院认为应支付200%工资报酬。
+"""
+    units = build_chunks_for_doc(text, "case")
+    assert units
+    combined = "".join(u.text for u in units)
+    assert "【案由】" not in combined
+    assert "【法院】" not in combined
+    assert "劳动者主张" in combined
+    assert units[0].metadata.get("cause") == "劳动争议"
 
 
 def test_dominant_risk_level():

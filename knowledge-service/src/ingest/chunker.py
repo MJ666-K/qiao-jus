@@ -1,6 +1,10 @@
+import logging
 from dataclasses import dataclass
 
 from core.config import settings
+from ingest.sentences import merge_sentences_to_chunks, split_sentences
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -19,40 +23,16 @@ def _approx_tokens(text: str) -> int:
 
 
 def _split_text(text: str, max_tokens: int, overlap: int) -> list[str]:
-    if not text.strip():
+    """Split by sentence boundaries; overlap also aligns to full sentences."""
+    sentences = split_sentences(text)
+    if not sentences:
         return []
-    sentences: list[str] = []
-    buf: list[str] = []
-    for ch in text:
-        buf.append(ch)
-        if ch in "。！？!?；;\n":
-            sentences.append("".join(buf))
-            buf = []
-    if buf:
-        sentences.append("".join(buf))
-
-    pieces: list[str] = []
-    cur: list[str] = []
-    cur_tokens = 0
-    for s in sentences:
-        st = _approx_tokens(s)
-        if cur and cur_tokens + st > max_tokens:
-            pieces.append("".join(cur).strip())
-            tail = []
-            tail_tokens = 0
-            for x in reversed(cur):
-                xt = _approx_tokens(x)
-                if tail_tokens + xt > overlap:
-                    break
-                tail.insert(0, x)
-                tail_tokens += xt
-            cur = list(tail)
-            cur_tokens = tail_tokens
-        cur.append(s)
-        cur_tokens += st
-    if cur:
-        pieces.append("".join(cur).strip())
-    return [p for p in pieces if p]
+    return merge_sentences_to_chunks(
+        sentences,
+        max_units=max_tokens,
+        overlap_units=overlap,
+        unit_fn=_approx_tokens,
+    )
 
 
 def build_parent_child(
@@ -68,8 +48,16 @@ def build_parent_child(
     ct = child_tokens or settings.chunk_child_tokens
     ov = overlap or settings.chunk_overlap_tokens
 
-    parents = _split_text(text, pt, ov // 2)
+    parents = _split_text(text, pt, ov)
     if not parents:
         return [], []
     parent_child_texts = [_split_text(p, ct, ov) for p in parents]
+    logger.info(
+        "[Chunk] parent_child: %d parents, %d children (parent_tokens=%d child_tokens=%d overlap=%d)",
+        len(parents),
+        sum(len(g) for g in parent_child_texts),
+        pt,
+        ct,
+        ov,
+    )
     return parents, parent_child_texts

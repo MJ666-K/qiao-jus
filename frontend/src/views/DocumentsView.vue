@@ -4,9 +4,7 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { UploadFile } from "element-plus";
 import {
-  Delete,
-  Document,
-  EditPen,
+  Folder,
   FolderOpened,
   MoreFilled,
   Plus,
@@ -29,12 +27,12 @@ import {
 import { listChunks } from "@/api/chunks";
 import { useAuthStore } from "@/stores/auth";
 import DocStatusTag from "@/components/DocStatusTag.vue";
-import { DOC_TYPES, SYSTEM_DATASET_NAMES, docTypeLabel } from "@/constants/docTypes";
-import type {
-  Dataset,
-  DocumentItem,
-  DocumentListSummary,
-} from "@/types";
+import {
+  DOC_TYPES,
+  SYSTEM_DATASET_NAMES,
+  docTypeLabel,
+} from "@/constants/docTypes";
+import type { Dataset, DocumentItem, DocumentListSummary } from "@/types";
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -77,6 +75,14 @@ const editingDataset = ref<Dataset | null>(null);
 const libraryForm = ref({ name: "", description: "", doc_type: "contract" });
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+const TERMINAL_DOC_STATUS = new Set(["done", "failed"]);
+
+const needsDocumentPoll = computed(
+  () =>
+    summary.value.processing > 0 ||
+    documents.value.some((d) => !TERMINAL_DOC_STATUS.has(d.status)),
+);
+
 const PLATFORM_DOC_TYPES = ["law", "case", "compliance"];
 const isAdmin = computed(() => auth.user?.role === "admin");
 
@@ -107,7 +113,9 @@ const canCreateLibrary = computed(() =>
 
 /** 私有库所有用户可上传；平台公共库仅管理员 */
 const canUploadDocuments = computed(
-  () => activeTab.value === "user" || (activeTab.value === "platform" && isAdmin.value),
+  () =>
+    activeTab.value === "user" ||
+    (activeTab.value === "platform" && isAdmin.value),
 );
 
 const docTypeOptions = computed(() =>
@@ -146,14 +154,15 @@ function ensureSelectedLibrary() {
   }
 }
 
-async function loadDocuments() {
+async function loadDocuments(opts: { silent?: boolean } = {}) {
   if (!selectedDatasetId.value) {
     documents.value = [];
     total.value = 0;
     summary.value = { done: 0, processing: 0, failed: 0 };
     return;
   }
-  loading.value = true;
+  const silent = opts.silent ?? false;
+  if (!silent) loading.value = true;
   try {
     const res = await listDocuments({
       dataset_id: selectedDatasetId.value,
@@ -165,8 +174,11 @@ async function loadDocuments() {
     documents.value = res.items;
     total.value = res.total;
     summary.value = res.summary;
+    if (silent) {
+      await refreshDetailIfOpen();
+    }
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
@@ -277,7 +289,9 @@ function onUploadFilesChange(_file: UploadFile, fileList: UploadFile[]) {
   for (const item of fileList) {
     if (!item.raw) continue;
     if (!isAllowedUploadName(item.name)) {
-      ElMessage.warning(`不支持的文件格式：${item.name}（支持 PDF、DOCX、MD、TXT、HTML）`);
+      ElMessage.warning(
+        `不支持的文件格式：${item.name}（支持 PDF、DOCX、MD、TXT、HTML）`,
+      );
       continue;
     }
     valid.push(item);
@@ -356,6 +370,31 @@ async function confirmUpload() {
   }
 }
 
+async function refreshDetailIfOpen() {
+  if (!detailDrawerOpen.value || !detailDoc.value) return;
+  const id = detailDoc.value.id;
+  if (TERMINAL_DOC_STATUS.has(detailDoc.value.status)) return;
+  try {
+    const doc = await getDocument(id);
+    detailDoc.value = doc;
+    if (doc.status === "done") {
+      const chunks = await listChunks(id).catch(() => []);
+      detailChunkCount.value = chunks.length;
+      detailContent.value = chunks
+        .sort((a, b) => a.chunk_index - b.chunk_index)
+        .map((c) => c.text)
+        .join("\n\n");
+    }
+  } catch {
+    /* 静默轮询失败不打断用户 */
+  }
+}
+
+async function pollDocuments() {
+  if (!selectedDatasetId.value || !needsDocumentPoll.value) return;
+  await loadDocuments({ silent: true });
+}
+
 async function openDetail(id: string) {
   detailDrawerOpen.value = true;
   detailLoading.value = true;
@@ -418,6 +457,19 @@ function formatTime(iso: string) {
   });
 }
 
+function formatShortDate(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    ...(sameYear ? {} : { year: "numeric" }),
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function fileExt(title: string): string {
   const m = title.match(/\.([^.]+)$/i);
   if (!m) return "FILE";
@@ -439,10 +491,6 @@ function rowStatusClass(status: string): string {
   if (status === "done") return "row-done";
   if (status === "failed") return "row-failed";
   return "row-processing";
-}
-
-function libraryInitial(name: string) {
-  return name.trim().charAt(0) || "库";
 }
 
 function canManageLibrary(ds: Dataset) {
@@ -495,9 +543,7 @@ watch(docTypeFilter, () => {
 
 onMounted(async () => {
   await refreshAll();
-  pollTimer = setInterval(() => {
-    if (selectedDatasetId.value) loadDocuments();
-  }, 8000);
+  pollTimer = setInterval(pollDocuments, 8000);
 });
 
 onUnmounted(() => {
@@ -507,307 +553,250 @@ onUnmounted(() => {
 
 <template>
   <div class="documents-page">
-    <header class="page-header card-panel">
-      <div class="tab-switch">
-        <button
-          type="button"
-          class="tab-btn"
-          :class="{ active: activeTab === 'user' }"
-          @click="activeTab = 'user'"
-        >
-          <el-icon><Document /></el-icon>
-          私有知识库
-        </button>
-        <button
-          type="button"
-          class="tab-btn"
-          :class="{ active: activeTab === 'platform' }"
-          @click="activeTab = 'platform'"
-        >
-          <el-icon><FolderOpened /></el-icon>
-          平台公共库
-        </button>
-      </div>
-      <div v-if="selectedDataset" class="header-stats">
-        <span
-          ><strong>{{ total }}</strong> 文档</span
-        >
-        <span
-          ><strong>{{ summary.done }}</strong> 已完成</span
-        >
-        <span v-if="summary.processing"
-          ><strong>{{ summary.processing }}</strong> 处理中</span
-        >
-      </div>
-    </header>
-
-    <div class="workspace">
-      <aside class="library-sidebar card-panel">
-        <div class="sidebar-head">
-          <h3>{{ activeTab === "user" ? "私有库列表" : "公共库列表" }}</h3>
-          <span class="count">{{ librariesForTab.length }}</span>
-        </div>
-
-        <button
-          v-if="canCreateLibrary"
-          type="button"
-          class="create-lib-btn"
-          @click="openCreateLibrary"
-        >
-          <el-icon><Plus /></el-icon>
-          新建知识库
-        </button>
-
-        <div v-loading="loading" class="library-list">
-          <el-empty
-            v-if="!librariesForTab.length"
-            :image-size="56"
-            :description="
-              activeTab === 'user' ? '暂无私有库，请先创建' : '暂无公共库'
-            "
-          >
-            <el-button
-              v-if="canCreateLibrary"
-              type="primary"
-              size="small"
-              @click="openCreateLibrary"
+    <div class="docs-shell card-panel">
+      <!-- 顶栏 -->
+      <header class="shell-header">
+        <div class="header-start">
+          <h1 class="shell-title">我的文档</h1>
+          <div class="scope-tabs">
+            <button
+              type="button"
+              class="scope-tab"
+              :class="{ active: activeTab === 'user' }"
+              @click="activeTab = 'user'"
             >
-              创建第一个库
-            </el-button>
-          </el-empty>
+              私有库
+            </button>
+            <button
+              type="button"
+              class="scope-tab"
+              :class="{ active: activeTab === 'platform' }"
+              @click="activeTab = 'platform'"
+            >
+              公共库
+            </button>
+          </div>
+        </div>
+        <div v-if="selectedDataset" class="header-stats">
+          <span>{{ total }} 篇</span>
+          <span class="dot">·</span>
+          <span class="ok">{{ summary.done }} 已完成</span>
+          <template v-if="summary.processing">
+            <span class="dot">·</span>
+            <span class="pending">{{ summary.processing }} 处理中</span>
+          </template>
+        </div>
+      </header>
 
+      <div class="shell-body">
+        <!-- 左侧知识库 -->
+        <aside class="lib-nav">
           <button
-            v-for="ds in librariesForTab"
-            :key="ds.id"
+            v-if="canCreateLibrary"
             type="button"
-            class="library-item"
-            :class="{ active: selectedDatasetId === ds.id }"
-            @click="selectedDatasetId = ds.id"
+            class="lib-add"
+            @click="openCreateLibrary"
           >
-            <div class="lib-avatar">{{ libraryInitial(ds.name) }}</div>
-            <div class="lib-info">
-              <div class="lib-name">{{ ds.name }}</div>
-              <div class="lib-meta">
-                <span>{{
-                  docTypeLabel(String(ds.metadata?.doc_type || ""))
-                }}</span>
-                <span class="dot">·</span>
-                <span>{{ ds.document_count ?? 0 }} 篇</span>
+            <el-icon><Plus /></el-icon>
+            新建知识库
+          </button>
+
+          <div v-loading="loading" class="lib-nav-list">
+            <div v-if="!librariesForTab.length" class="lib-nav-empty">
+              <p>暂无知识库</p>
+              <el-button
+                v-if="canCreateLibrary"
+                link
+                type="primary"
+                @click="openCreateLibrary"
+              >
+                立即创建
+              </el-button>
+            </div>
+
+            <button
+              v-for="ds in librariesForTab"
+              :key="ds.id"
+              type="button"
+              class="lib-nav-item"
+              :class="{ active: selectedDatasetId === ds.id }"
+              @click="selectedDatasetId = ds.id"
+            >
+              <el-icon class="lib-nav-icon">
+                <FolderOpened v-if="selectedDatasetId === ds.id" />
+                <Folder v-else />
+              </el-icon>
+              <span class="lib-nav-name">{{ ds.name }}</span>
+              <span class="lib-nav-count">{{ ds.document_count ?? 0 }}</span>
+              <el-dropdown
+                v-if="canManageLibrary(ds)"
+                trigger="click"
+                @click.stop
+                @command="
+                  (cmd: string) =>
+                    cmd === 'edit' ? openEditLibrary(ds) : removeLibrary(ds)
+                "
+              >
+                <el-icon class="lib-nav-more" @click.stop><MoreFilled /></el-icon>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">重命名</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </button>
+          </div>
+        </aside>
+
+        <!-- 右侧内容 -->
+        <section class="doc-content">
+          <template v-if="selectedDataset">
+            <div class="content-toolbar">
+              <div class="content-head">
+                <h2>{{ selectedDataset.name }}</h2>
+                <p v-if="selectedDataset.description">{{ selectedDataset.description }}</p>
+                <p v-else class="muted">PDF · DOCX · MD · TXT · HTML</p>
+              </div>
+              <div class="content-actions">
+                <el-select
+                  v-model="docTypeFilter"
+                  placeholder="类型"
+                  clearable
+                  size="default"
+                  class="type-select"
+                >
+                  <el-option
+                    v-for="t in docTypeOptions"
+                    :key="t.id"
+                    :label="t.label"
+                    :value="t.id"
+                  />
+                </el-select>
+                <el-button :icon="Refresh" :loading="loading" @click="loadDocuments" />
+                <el-button
+                  v-if="canUploadDocuments"
+                  type="primary"
+                  :icon="Upload"
+                  @click="openUploadDialog"
+                >
+                  上传
+                </el-button>
               </div>
             </div>
-            <el-dropdown
-              v-if="canManageLibrary(ds)"
-              trigger="click"
-              @click.stop
-              @command="
-                (cmd: string) =>
-                  cmd === 'edit' ? openEditLibrary(ds) : removeLibrary(ds)
-              "
-            >
-              <el-icon class="lib-more" @click.stop><MoreFilled /></el-icon>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="edit">
-                    <el-icon><EditPen /></el-icon>重命名
-                  </el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>
-                    <el-icon><Delete /></el-icon>删除
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </button>
-        </div>
-      </aside>
 
-      <main class="doc-main card-panel">
-        <template v-if="selectedDataset">
-          <div class="main-toolbar">
-            <div class="toolbar-left">
-              <h2 class="lib-title">{{ selectedDataset.name }}</h2>
-              <p v-if="selectedDataset.description" class="lib-desc">
-                {{ selectedDataset.description }}
-              </p>
-            </div>
-            <div class="toolbar-right">
-              <el-select
-                v-model="docTypeFilter"
-                placeholder="文档类型"
-                clearable
-                class="type-filter"
+            <div v-loading="loading" class="content-body">
+              <el-empty
+                v-if="!documents.length"
+                :image-size="64"
+                description="暂无文档，上传后将自动解析入库"
               >
-                <el-option
-                  v-for="t in docTypeOptions"
-                  :key="t.id"
-                  :label="t.label"
-                  :value="t.id"
-                />
-              </el-select>
-              <el-button
-                :icon="Refresh"
-                :loading="loading"
-                @click="loadDocuments"
-                >刷新</el-button
-              >
-              <el-button
-                v-if="canUploadDocuments"
-                type="primary"
-                :icon="Upload"
-                @click="openUploadDialog"
-              >
-                上传文档
-              </el-button>
-            </div>
-          </div>
+                <el-button
+                  v-if="canUploadDocuments"
+                  type="primary"
+                  :icon="Upload"
+                  @click="openUploadDialog"
+                >
+                  上传文档
+                </el-button>
+              </el-empty>
 
-          <p v-if="canUploadDocuments" class="upload-hint">
-            支持批量上传 PDF、DOCX、MD、TXT、HTML
-            <template v-if="activeTab === 'platform'">（平台公共库，仅管理员可维护）</template>
-          </p>
-          <p v-else class="upload-hint muted">
-            平台公共库只读，如需扩充请联系管理员
-          </p>
-
-          <div v-loading="loading" class="doc-list-wrap">
-            <el-empty
-              v-if="!documents.length"
-              :image-size="72"
-              :description="
-                activeTab === 'user' ? '该库暂无文档' : '该库暂无文档'
-              "
-            >
-              <el-button
-                v-if="canUploadDocuments"
-                type="primary"
-                :icon="Upload"
-                @click="openUploadDialog"
-              >
-                上传第一份文档
-              </el-button>
-            </el-empty>
-
-            <template v-else>
-              <div class="doc-table-panel">
-                <div class="doc-table-head">
-                  <span class="col-name">文档名称</span>
-                  <span class="col-type">类型</span>
-                  <span class="col-status">状态</span>
-                  <span class="col-time">上传时间</span>
-                  <span class="col-actions">操作</span>
-                </div>
-
-                <ul class="doc-list">
-                  <li
-                    v-for="doc in documents"
-                    :key="doc.id"
-                    class="doc-row"
-                    :class="rowStatusClass(doc.status)"
-                  >
-                    <div class="col-name">
-                      <div class="file-badge" :class="fileExtClass(doc.title)">
-                        {{ fileExt(doc.title) }}
+              <template v-else>
+                <el-table
+                  :data="documents"
+                  class="doc-table"
+                  :row-class-name="({ row }) => rowStatusClass(row.status)"
+                  @row-click="(row: DocumentItem) => openDetail(row.id)"
+                >
+                  <el-table-column label="文档" min-width="280">
+                    <template #default="{ row }">
+                      <div class="cell-file">
+                        <span class="ext-tag" :class="fileExtClass(row.title)">
+                          {{ fileExt(row.title) }}
+                        </span>
+                        <span class="file-name" :title="row.title">{{ row.title }}</span>
                       </div>
-                      <div class="name-block">
-                        <span class="doc-title" :title="doc.title">{{
-                          doc.title
-                        }}</span>
-                      </div>
-                    </div>
-
-                    <div class="col-type">
-                      <span class="type-chip">
-                        {{ docTypeLabel(String(doc.metadata?.doc_type || "")) }}
-                      </span>
-                    </div>
-
-                    <div class="col-status">
-                      <DocStatusTag :status="doc.status" />
-                    </div>
-
-                    <div class="col-time">
-                      <span class="time-main">{{
-                        formatTime(doc.created_at)
-                      }}</span>
-                    </div>
-
-                    <div class="col-actions">
-                      <div class="action-group">
-                        <button
-                          type="button"
-                          class="act-btn act-primary"
-                          @click.stop="openDetail(doc.id)"
-                        >
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="类型" width="100">
+                    <template #default="{ row }">
+                      {{ docTypeLabel(String(row.metadata?.doc_type || "")) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="状态" width="100">
+                    <template #default="{ row }">
+                      <DocStatusTag :status="row.status" />
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="上传时间" width="148">
+                    <template #default="{ row }">
+                      <span class="time-cell">{{ formatShortDate(row.created_at) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column label="" width="148" fixed="right" align="right">
+                    <template #default="{ row }">
+                      <div class="cell-actions" @click.stop>
+                        <el-button link type="primary" @click="openDetail(row.id)">
                           详情
-                        </button>
-                        <button
-                          type="button"
-                          class="act-btn"
-                          @click.stop="
-                            router.push(`/documents/${doc.id}/chunks`)
-                          "
+                        </el-button>
+                        <el-button
+                          link
+                          type="primary"
+                          @click="router.push(`/documents/${row.id}/chunks`)"
                         >
                           文本块
-                        </button>
+                        </el-button>
                         <el-dropdown
-                          v-if="canManageDoc(doc)"
+                          v-if="canManageDoc(row)"
                           trigger="click"
-                          @command="(cmd: string) => handleDocAction(cmd, doc)"
+                          @command="(cmd: string) => handleDocAction(cmd, row)"
                         >
-                          <button
-                            type="button"
-                            class="act-btn act-more"
-                            @click.stop
-                          >
+                          <el-button link type="primary">
                             <el-icon><MoreFilled /></el-icon>
-                          </button>
+                          </el-button>
                           <template #dropdown>
                             <el-dropdown-menu>
-                              <el-dropdown-item command="reindex"
-                                >重新索引</el-dropdown-item
-                              >
-                              <el-dropdown-item command="delete" divided
-                                >删除</el-dropdown-item
-                              >
+                              <el-dropdown-item command="reindex">重新索引</el-dropdown-item>
+                              <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
                             </el-dropdown-menu>
                           </template>
                         </el-dropdown>
                       </div>
-                    </div>
-                  </li>
-                </ul>
-              </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
 
-              <div class="pagination-bar">
-                <el-pagination
-                  v-model:current-page="page"
-                  v-model:page-size="pageSize"
-                  :total="total"
-                  :page-sizes="[10, 20, 50]"
-                  layout="total, sizes, prev, pager, next"
-                  background
-                  @current-change="onPageChange"
-                  @size-change="onPageSizeChange"
-                />
-              </div>
-            </template>
+                <div class="table-footer">
+                  <el-pagination
+                    v-model:current-page="page"
+                    v-model:page-size="pageSize"
+                    :total="total"
+                    :page-sizes="[10, 20, 50]"
+                    layout="total, sizes, prev, pager, next"
+                    background
+                    small
+                    @current-change="onPageChange"
+                    @size-change="onPageSizeChange"
+                  />
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div v-else class="content-empty">
+            <el-empty description="选择左侧知识库，或创建一个新的">
+              <el-button
+                v-if="canCreateLibrary"
+                type="primary"
+                :icon="Plus"
+                @click="openCreateLibrary"
+              >
+                新建知识库
+              </el-button>
+            </el-empty>
           </div>
-        </template>
-
-        <el-empty
-          v-else
-          :image-size="80"
-          description="请从左侧选择或创建知识库"
-        >
-          <el-button
-            v-if="canCreateLibrary"
-            type="primary"
-            :icon="Plus"
-            @click="openCreateLibrary"
-          >
-            新建知识库
-          </el-button>
-        </el-empty>
-      </main>
+        </section>
+      </div>
     </div>
 
     <!-- 上传确认弹窗 -->
@@ -868,7 +857,8 @@ onUnmounted(() => {
               <el-icon class="upload-placeholder-icon"><Upload /></el-icon>
               <p class="upload-placeholder-title">点击选择文件（可多选）</p>
               <p class="upload-placeholder-tip">
-                支持 PDF · DOCX · MD · TXT · HTML，单次最多 {{ UPLOAD_FILE_LIMIT }} 个
+                支持 PDF · DOCX · MD · TXT · HTML，单次最多
+                {{ UPLOAD_FILE_LIMIT }} 个
               </p>
             </div>
           </el-upload>
@@ -879,10 +869,7 @@ onUnmounted(() => {
               :key="`${file.name}-${file.size}-${index}`"
               class="file-preview-card"
             >
-              <div
-                class="file-preview-badge"
-                :class="fileExtClass(file.name)"
-              >
+              <div class="file-preview-badge" :class="fileExtClass(file.name)">
                 {{ fileExt(file.name) }}
               </div>
               <div class="file-preview-info">
@@ -916,7 +903,9 @@ onUnmounted(() => {
             :disabled="!pendingFiles.length"
             @click="confirmUpload"
           >
-            确认上传{{ pendingFiles.length ? `（${pendingFiles.length}）` : "" }}
+            确认上传{{
+              pendingFiles.length ? `（${pendingFiles.length}）` : ""
+            }}
           </el-button>
         </div>
       </template>
@@ -964,9 +953,14 @@ onUnmounted(() => {
             <div v-if="detailContent" class="detail-content-box">
               <pre class="detail-content-text">{{ detailContent }}</pre>
             </div>
-            <div v-else-if="detailDoc.status === 'failed'" class="detail-empty detail-empty-error">
+            <div
+              v-else-if="detailDoc.status === 'failed'"
+              class="detail-empty detail-empty-error"
+            >
               <p>文档处理失败，暂无内容</p>
-              <pre v-if="detailDoc.error" class="error-text">{{ detailDoc.error }}</pre>
+              <pre v-if="detailDoc.error" class="error-text">{{
+                detailDoc.error
+              }}</pre>
             </div>
             <div v-else-if="detailDoc.status !== 'done'" class="detail-empty">
               <p>文档处理中，内容将在切块完成后显示</p>
@@ -984,20 +978,28 @@ onUnmounted(() => {
                 <dt>上传时间</dt>
                 <dd>{{ formatTime(detailDoc.created_at) }}</dd>
                 <dt v-if="detailDoc.updated_at">更新时间</dt>
-                <dd v-if="detailDoc.updated_at">{{ formatTime(detailDoc.updated_at) }}</dd>
+                <dd v-if="detailDoc.updated_at">
+                  {{ formatTime(detailDoc.updated_at) }}
+                </dd>
                 <dt v-if="detailDoc.mime_type">文件格式</dt>
                 <dd v-if="detailDoc.mime_type">{{ detailDoc.mime_type }}</dd>
                 <dt>文档 ID</dt>
-                <dd><code class="detail-id-inline">{{ detailDoc.id }}</code></dd>
+                <dd>
+                  <code class="detail-id-inline">{{ detailDoc.id }}</code>
+                </dd>
               </dl>
             </el-collapse-item>
           </el-collapse>
 
           <div class="detail-actions">
-            <el-button type="primary" @click="goToChunks(detailDoc.id)">文本块管理</el-button>
+            <el-button type="primary" @click="goToChunks(detailDoc.id)"
+              >文本块管理</el-button
+            >
             <template v-if="canManageDoc(detailDoc)">
               <el-button @click="reindex(detailDoc.id)">重新索引</el-button>
-              <el-button type="danger" plain @click="remove(detailDoc.id)">删除</el-button>
+              <el-button type="danger" plain @click="remove(detailDoc.id)"
+                >删除</el-button
+              >
             </template>
           </div>
         </template>
@@ -1074,528 +1076,364 @@ onUnmounted(() => {
 
 <style scoped>
 .documents-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-section);
   min-width: 0;
   height: calc(100vh - var(--topbar-height) - var(--page-padding-y) * 2);
   min-height: 520px;
 }
 
-.page-header {
+.docs-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* ── 顶栏 ── */
+.shell-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 20px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
-  background: linear-gradient(180deg, #fffbf5 0%, var(--brand-surface) 100%);
-  border-color: rgb(249 115 22 / 10%);
 }
 
-.tab-switch {
-  display: inline-flex;
-  gap: 6px;
-  padding: 4px;
-  background: rgb(28 25 23 / 4%);
-  border-radius: var(--radius-md);
-}
-
-.tab-btn {
-  display: inline-flex;
+.header-start {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    box-shadow 0.15s;
+  gap: 20px;
+  min-width: 0;
 }
 
-.tab-btn:hover {
+.shell-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
   color: var(--text-primary);
-  background: rgb(255 255 255 / 60%);
+  white-space: nowrap;
 }
 
-.tab-btn.active {
-  background: var(--brand-surface);
+.scope-tabs {
+  display: inline-flex;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.scope-tab {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.scope-tab + .scope-tab {
+  border-left: 1px solid var(--border-default);
+}
+
+.scope-tab:hover {
+  background: var(--brand-sidebar-hover);
+}
+
+.scope-tab.active {
+  background: var(--brand-primary-soft);
   color: var(--brand-primary-dark);
   font-weight: 600;
-  box-shadow: var(--shadow-sm);
 }
 
 .header-stats {
-  display: flex;
-  gap: 20px;
   font-size: 13px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.header-stats strong {
-  color: var(--brand-primary-dark);
-  font-weight: 700;
-  margin-right: 2px;
+.header-stats .dot {
+  margin: 0 6px;
+  opacity: 0.4;
 }
 
-.workspace {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: var(--gap-section);
+.header-stats .ok {
+  color: #059669;
+}
+
+.header-stats .pending {
+  color: #d97706;
+}
+
+/* ── 主体分栏 ── */
+.shell-body {
+  display: flex;
   flex: 1;
   min-height: 0;
 }
 
-.library-sidebar {
+.lib-nav {
+  width: 220px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+  background: #fafaf9;
   min-height: 0;
-  padding: 16px;
-  background: linear-gradient(180deg, #fafaf9 0%, var(--brand-surface) 100%);
 }
 
-.sidebar-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.sidebar-head h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.sidebar-head .count {
-  font-size: 12px;
-  color: var(--text-muted);
-  background: rgb(28 25 23 / 5%);
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.create-lib-btn {
+.lib-add {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  width: 100%;
-  margin-bottom: 12px;
-  padding: 9px 12px;
-  border: 1px dashed var(--brand-primary);
-  border-radius: var(--radius-sm);
-  background: #fff;
-  color: var(--brand-primary-dark);
+  margin: 12px;
+  padding: 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
   font-size: 13px;
-  font-weight: 600;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.create-lib-btn:hover {
-  background: var(--brand-primary-soft);
-  border-color: var(--brand-primary-dark);
+.lib-add:hover {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary-dark);
+  background: #fff;
 }
 
-.library-list {
+.lib-nav-list {
   flex: 1;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  padding: 0 8px 12px;
   min-height: 0;
 }
 
-.library-item {
+.lib-nav-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.lib-nav-empty p {
+  margin: 0 0 8px;
+}
+
+.lib-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  padding: 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  border: none;
+  border-radius: 8px;
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background 0.12s, color 0.12s;
 }
 
-.library-item:hover {
-  background: rgb(255 255 255 / 70%);
+.lib-nav-item:hover {
+  background: rgb(255 255 255 / 80%);
+  color: var(--text-primary);
 }
 
-.library-item.active {
-  background: var(--brand-primary-soft);
-  border-color: rgb(249 115 22 / 25%);
+.lib-nav-item.active {
+  background: #fff;
+  color: var(--text-primary);
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
 }
 
-.lib-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--brand-primary-soft), #ffedd5);
-  color: var(--brand-primary-dark);
-  font-weight: 700;
-  font-size: 14px;
-  display: grid;
-  place-items: center;
+.lib-nav-icon {
+  font-size: 16px;
   flex-shrink: 0;
+  color: var(--text-muted);
 }
 
-.library-item.active .lib-avatar {
-  background: linear-gradient(
-    135deg,
-    var(--brand-primary),
-    var(--brand-primary-dark)
-  );
-  color: #fff;
+.lib-nav-item.active .lib-nav-icon {
+  color: var(--brand-primary);
 }
 
-.lib-info {
+.lib-nav-name {
   flex: 1;
   min-width: 0;
-}
-
-.lib-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lib-meta {
+.lib-nav-count {
   font-size: 11px;
   color: var(--text-muted);
-  margin-top: 2px;
-}
-
-.lib-meta .dot {
-  margin: 0 3px;
-}
-
-.lib-more {
+  background: var(--border-subtle);
+  padding: 1px 6px;
+  border-radius: 10px;
   flex-shrink: 0;
+}
+
+.lib-nav-more {
+  flex-shrink: 0;
+  font-size: 14px;
   color: var(--text-muted);
-  padding: 4px;
+  padding: 2px;
   border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.12s;
 }
 
-.lib-more:hover {
-  color: var(--brand-primary);
-  background: rgb(249 115 22 / 10%);
+.lib-nav-item:hover .lib-nav-more {
+  opacity: 1;
 }
 
-.doc-main {
+/* ── 右侧内容 ── */
+.doc-content {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  min-width: 0;
-  padding: 18px 20px;
 }
 
-.main-toolbar {
+.content-toolbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
-.lib-title {
+.content-head h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
-.lib-desc {
+.content-head p {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
-  line-height: 1.5;
 }
 
-.toolbar-right {
+.content-head p.muted {
+  color: var(--text-body);
+}
+
+.content-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-}
-
-.type-filter {
-  width: 150px;
-}
-
-.upload-hint {
-  margin: 0 0 14px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.upload-hint.muted {
-  color: var(--text-secondary);
-}
-
-.doc-list-wrap {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.doc-table-panel {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: #fafaf9;
-  overflow: hidden;
-}
-
-.doc-table-head,
-.doc-row {
-  display: grid;
-  grid-template-columns: minmax(200px, 1fr) 108px 96px 148px minmax(180px, auto);
-  align-items: center;
-  gap: 12px;
-  padding: 0 16px;
-}
-
-.doc-table-head {
-  height: 40px;
-  background: linear-gradient(180deg, #fff 0%, #fafaf9 100%);
-  border-bottom: 1px solid var(--border-default);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  letter-spacing: 0.02em;
   flex-shrink: 0;
 }
 
-.doc-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px 0;
+.type-select {
+  width: 120px;
+}
+
+.content-body {
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
-}
-
-.doc-row {
-  position: relative;
-  min-height: 68px;
-  margin: 4px 8px;
-  padding: 12px 16px 12px 20px;
-  border-radius: var(--radius-sm);
-  background: var(--brand-surface);
-  border: 1px solid transparent;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s,
-    transform 0.12s;
-}
-
-.doc-row::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: #d6d3d1;
-}
-
-.doc-row.row-done::before {
-  background: #10b981;
-}
-
-.doc-row.row-failed::before {
-  background: #ef4444;
-}
-
-.doc-row.row-processing::before {
-  background: #f59e0b;
-}
-
-.doc-row:hover {
-  border-color: rgb(249 115 22 / 18%);
-  box-shadow: 0 2px 12px rgb(249 115 22 / 8%);
-  transform: translateY(-1px);
-}
-
-.col-name {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.file-badge {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  flex-shrink: 0;
-  border: 1px solid transparent;
-}
-
-.file-badge.ext-pdf {
-  background: #fef2f2;
-  color: #dc2626;
-  border-color: #fecaca;
-}
-
-.file-badge.ext-doc {
-  background: #eff6ff;
-  color: #2563eb;
-  border-color: #bfdbfe;
-}
-
-.file-badge.ext-md {
-  background: #ecfdf5;
-  color: #059669;
-  border-color: #a7f3d0;
-}
-
-.file-badge.ext-html {
-  background: #fff7ed;
-  color: #ea580c;
-  border-color: #fed7aa;
-}
-
-.file-badge.ext-txt {
-  background: #f5f5f4;
-  color: #57534e;
-  border-color: #e7e5e4;
-}
-
-.file-badge.ext-default {
-  background: var(--brand-primary-soft);
-  color: var(--brand-primary-dark);
-  border-color: rgb(249 115 22 / 20%);
-}
-
-.name-block {
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-}
-
-.doc-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
+  padding: 0 20px 16px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.type-chip {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: #f5f5f4;
-  border: 1px solid var(--border-subtle);
-  white-space: nowrap;
-}
-
-.col-time {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.time-main {
-  white-space: nowrap;
-}
-
-.col-actions {
+.content-empty {
+  flex: 1;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
 }
 
-.action-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  background: #f5f5f4;
+/* ── 表格 ── */
+.doc-table {
+  flex: 1;
+  min-height: 0;
+  --el-table-border-color: var(--border-subtle);
+  --el-table-header-bg-color: #fafaf9;
+  --el-table-row-hover-bg-color: #fffbf5;
+}
+
+.doc-table :deep(.el-table__inner-wrapper) {
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
 }
 
-.act-btn {
+.doc-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+
+.doc-table :deep(.row-processing) {
+  --el-table-tr-bg-color: #fffbeb;
+}
+
+.doc-table :deep(.row-failed) {
+  --el-table-tr-bg-color: #fef2f2;
+}
+
+.cell-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ext-tag {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ext-tag.ext-pdf { background: #fef2f2; color: #dc2626; }
+.ext-tag.ext-doc { background: #eff6ff; color: #2563eb; }
+.ext-tag.ext-md { background: #ecfdf5; color: #059669; }
+.ext-tag.ext-html { background: #fff7ed; color: #ea580c; }
+.ext-tag.ext-txt { background: #f5f5f4; color: #57534e; }
+.ext-tag.ext-default { background: var(--brand-primary-soft); color: var(--brand-primary-dark); }
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.time-cell {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-actions {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    box-shadow 0.15s;
-  white-space: nowrap;
+  gap: 0;
 }
 
-.act-btn:hover {
-  background: #fff;
-  color: var(--brand-primary-dark);
-}
-
-.act-btn.act-primary {
-  background: #fff;
-  color: var(--brand-primary-dark);
-  box-shadow: 0 1px 2px rgb(28 25 23 / 6%);
-}
-
-.act-btn.act-more {
-  padding: 5px 8px;
-  min-width: 28px;
-}
-
-.act-btn.act-more .el-icon {
-  font-size: 14px;
-}
-
-.pagination-bar {
+.table-footer {
   flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
-  padding-top: 14px;
-  margin-top: 8px;
-  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
 }
 
 .upload-tip {
@@ -1835,12 +1673,36 @@ onUnmounted(() => {
   border: 1px solid transparent;
 }
 
-.detail-file-badge.ext-pdf { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
-.detail-file-badge.ext-doc { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
-.detail-file-badge.ext-md { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
-.detail-file-badge.ext-html { background: #fff7ed; color: #ea580c; border-color: #fed7aa; }
-.detail-file-badge.ext-txt { background: #f5f5f4; color: #57534e; border-color: #e7e5e4; }
-.detail-file-badge.ext-default { background: var(--brand-primary-soft); color: var(--brand-primary-dark); border-color: rgb(249 115 22 / 20%); }
+.detail-file-badge.ext-pdf {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+.detail-file-badge.ext-doc {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+.detail-file-badge.ext-md {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+.detail-file-badge.ext-html {
+  background: #fff7ed;
+  color: #ea580c;
+  border-color: #fed7aa;
+}
+.detail-file-badge.ext-txt {
+  background: #f5f5f4;
+  color: #57534e;
+  border-color: #e7e5e4;
+}
+.detail-file-badge.ext-default {
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary-dark);
+  border-color: rgb(249 115 22 / 20%);
+}
 
 .detail-title {
   margin: 0;
@@ -2022,43 +1884,28 @@ onUnmounted(() => {
     min-height: 0;
   }
 
-  .workspace {
-    grid-template-columns: 1fr;
+  .shell-body {
+    flex-direction: column;
   }
 
-  .library-sidebar {
-    max-height: 240px;
+  .lib-nav {
+    width: 100%;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
   }
 
-  .page-header {
+  .shell-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .doc-table-head {
-    display: none;
-  }
-
-  .doc-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-    padding: 14px 14px 14px 18px;
-  }
-
-  .col-type,
-  .col-status,
-  .col-time {
-    padding-left: 52px;
-  }
-
-  .col-actions {
-    padding-left: 52px;
-    justify-content: flex-start;
-  }
-
-  .action-group {
+  .header-start {
     flex-wrap: wrap;
-    justify-content: flex-end;
+  }
+
+  .content-toolbar {
+    flex-direction: column;
   }
 
   .upload-info-grid {

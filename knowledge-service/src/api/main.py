@@ -26,7 +26,10 @@ from storage.neo4j_client import close_driver, ensure_schema
 from storage.postgres import init_db
 from storage.qdrant_client import ensure_collection
 
-logging.basicConfig(level=settings.app_log_level)
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+_LOG_DATE = "%H:%M:%S"
+
+logging.basicConfig(level=settings.app_log_level, format=_LOG_FORMAT, datefmt=_LOG_DATE)
 logger = logging.getLogger(__name__)
 
 
